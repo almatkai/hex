@@ -188,6 +188,20 @@ pub(super) const GIGAAM_V3_E2E_RNNT_ARTIFACT: GgufArtifact = GgufArtifact {
     architecture: "gigaam",
     variant: "gigaam-v3-e2e-rnnt",
 };
+// ai-sage's GigaAM Multilingual Large CTC (MIT), for ru/kk/ky/uz/en.
+// vladkens converted ai-sage/GigaAM-Multilingual's `large_ctc` branch at
+// 3905cd5 with transcribe.cpp's scripts/convert-gigaam.py (PR #251), then
+// quantized to Q8_0. It emits lowercase, unpunctuated text and numbers as
+// words; training segments were at most 25 seconds.
+pub(super) const GIGAAM_MULTILINGUAL_ARTIFACT: GgufArtifact = GgufArtifact {
+    filename: "gigaam-multilingual-large-ctc-Q8_0.gguf",
+    revision: "39b8d193ff3109455867211425fc8db89914fb84",
+    repository: "vladkens/gigaam-multilingual-large-ctc-gguf",
+    bytes: 711_746_112,
+    sha256: "db9dc408b9afaafbecc062d2b00a33038db86e212098ce1b3732c6e453e2d4c9",
+    architecture: "gigaam",
+    variant: "gigaam-multilingual-large-ctc",
+};
 // The National Library of Norway's NB-Whisper Medium (Apache-2.0), a
 // Whisper medium fine-tune for Norwegian: NbAiLab's own whisper.cpp Q5_0
 // file at nb-whisper-medium 0ed074d5, which transcribe.cpp loads as Whisper.

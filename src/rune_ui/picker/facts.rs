@@ -230,6 +230,9 @@ pub(super) fn blurb(def: &ModelDefinition) -> &'static str {
         M::UnderdogBark3Pro => tr("Parakeet, tuned for fewer wrong words in English"),
         M::UnderdogBark3Clean => tr("English, with the ums and uhs taken out"),
         M::Nemotron35Asr => tr("Writes while you talk, in 27 languages"),
+        M::GigaAmMultilingual => {
+            tr("Russian, Kazakh, Kyrgyz, Uzbek and English, without punctuation")
+        }
         M::GigaAmV3 => tr("Russian, with punctuation. A small download"),
         M::NbWhisperMedium => tr("Whisper, tuned for Norwegian by its National Library"),
         M::GraniteSpeech5 => tr("IBM's model for seven languages, with punctuation"),

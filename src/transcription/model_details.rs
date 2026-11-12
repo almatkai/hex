@@ -125,10 +125,27 @@ const ORUKEET: ModelDetails = ModelDetails {
                            digest, dataset revision, and scorer versions unknown",
 };
 
+const GIGAAM_MULTILINGUAL: ModelDetails = ModelDetails {
+    attribution: "GigaAM Multilingual Large CTC by ai-sage / GigaChat Team. MIT License. \
+                  Copyright (c) 2024 GigaChat Team. GGUF conversion and Q8_0 quantization by vladkens.",
+    source_url: "https://huggingface.co/vladkens/gigaam-multilingual-large-ctc-gguf/blob/\
+                 39b8d193ff3109455867211425fc8db89914fb84/README.md",
+    license_url: "https://huggingface.co/vladkens/gigaam-multilingual-large-ctc-gguf/blob/\
+                  39b8d193ff3109455867211425fc8db89914fb84/LICENSE",
+    notice: "Converted from ai-sage/GigaAM-Multilingual, large_ctc at 3905cd5, with \
+             transcribe.cpp's GigaAM converter (PR #251), then quantized to Q8_0. \
+             Output is lowercase, without punctuation, with numbers spelled as words. \
+             Trained on segments up to 25 seconds; Hex chunks longer audio at that limit.",
+    peak_memory: None,
+    published: &[],
+    published_conditions: "",
+};
+
 pub fn details(id: TranscriptionModelId) -> Option<&'static ModelDetails> {
     match id {
         TranscriptionModelId::ParakeetUltra => Some(&PARAKEET_ULTRA),
         TranscriptionModelId::Orukeet => Some(&ORUKEET),
+        TranscriptionModelId::GigaAmMultilingual => Some(&GIGAAM_MULTILINGUAL),
         _ => None,
     }
 }
@@ -136,6 +153,22 @@ pub fn details(id: TranscriptionModelId) -> Option<&'static ModelDetails> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn multilingual_gigaam_credits_the_pinned_conversion_without_hex_benchmarks() {
+        let id = TranscriptionModelId::GigaAmMultilingual;
+        let details = details(id).unwrap();
+        assert!(details.attribution.contains("MIT License"));
+        assert!(
+            details
+                .source_url
+                .contains("39b8d193ff3109455867211425fc8db89914fb84")
+        );
+        assert!(details.license_url.ends_with("/LICENSE"));
+        assert!(details.peak_memory.is_none());
+        assert!(details.published.is_empty());
+        assert!(super::super::models::benchmark(super::super::models::definition(id)).is_none());
+    }
 
     #[test]
     fn parakeet_ultras_published_scores_cover_its_languages_once() {

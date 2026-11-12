@@ -393,6 +393,7 @@ impl LocalTranscriber {
             device_label,
             max_audio_samples: crate::transcription::models::max_audio_chunk_samples(
                 &architecture,
+                &variant,
                 capabilities.max_audio_ms,
             ),
             stream: None,

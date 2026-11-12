@@ -7,6 +7,11 @@ cache. Both are ordinary features on every OS (they left Labs as
 Catalog models stay the tested path: Hex vouches for nothing in a file it
 didn't pin.
 
+GigaAM Multilingual Large CTC is also a pinned catalog download: use the
+picker or `hex model install gigaam_multilingual` without importing a file.
+It supports Russian, Kazakh, Kyrgyz, Uzbek and English without a hint;
+see [dictation's model choices](dictation.md) for recommendations and limits.
+
 ## Add A Model File
 
 ```ts

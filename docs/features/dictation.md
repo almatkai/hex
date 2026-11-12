@@ -1238,6 +1238,16 @@ Model advertises streaming, GPU device             // dictate.streaming
   ├── ru: GigaAM v3 Recommended (ai-sage's e2e RNN-T, Russian only, 274 MB, no
   │   hint; 5.37% WER on FLEURS Russian test against Parakeet v3's 6.52% and
   │   Whisper turbo's 5.36%, Hex's run), then Whisper turbo for Vocabulary (#952)
+  ├── ru also offers GigaAM Multilingual Large CTC without a badge; v3 stays
+  │   Recommended for its punctuation
+  ├── kk / ky / uz: GigaAM Multilingual Large CTC Recommended (ai-sage, MIT,
+  │   Q8_0, 711 MB); also supports ru / en, no language hint or Auto,
+  │   lowercase without punctuation, numbers as words; long audio chunks
+  │   capped at 25 s on the existing Metal / Vulkan GGUF path. Picker Download
+  │   or `hex model install gigaam_multilingual`; no Hex benchmark recorded.
+  │   Checks: `multilingual_gigaam_recommends_central_asian_languages_without_hints`,
+  │   `multilingual_gigaam_chunks_at_25_seconds_without_changing_v3`.
+  │   Catalog download and native runtime on each OS are not exercised by these tests.
   ├── no: NB-Whisper Medium Recommended (National Library of Norway, Norwegian
   │   only, always with the `no` hint, 539 MB; 6.68% WER on FLEURS Norwegian
   │   test against Whisper turbo's 8.94%, Hex's run), then Whisper turbo for
