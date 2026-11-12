@@ -98,6 +98,7 @@ impl Feature {
             | Self::LiveText
             | Self::FailureNotices
             | Self::LiveTyping
+            | Self::AntigravitySummaries
             | Self::LiveChapters
             | Self::VocabularyBiasing
             | Self::TerminalPaste
@@ -171,6 +172,7 @@ impl Feature {
     /// The day it joined Labs, as `yyyymmdd`. Labs marks the newest as New.
     pub const fn added(self) -> u32 {
         match self {
+            Self::AntigravitySummaries => 20261113,
             Self::Meetings
             | Self::VoiceFilter
             | Self::Playground
@@ -279,6 +281,7 @@ impl Feature {
     /// Whether this OS has the feature at all, in any build.
     pub fn on_this_os(self) -> bool {
         match self {
+            Self::AntigravitySummaries => true,
             Self::Meetings
             | Self::LiveChapters
             | Self::SubtitleExport
@@ -374,6 +377,7 @@ impl Feature {
             Self::FailureNotices => "failure-notices",
             Self::LiveTyping => "live-typing",
             Self::LiveChapters => "live-chapters",
+            Self::AntigravitySummaries => "antigravity-summaries",
             Self::VocabularyBiasing => "vocabulary-biasing",
             Self::TerminalPaste => "terminal-paste",
             Self::KeyboardModelSwitching => "keyboard-model-switching",
@@ -453,6 +457,7 @@ impl Feature {
             Self::FailureNotices => "labs.failure_notices",
             Self::LiveTyping => "labs.live_typing",
             Self::LiveChapters => "labs.live_chapters",
+            Self::AntigravitySummaries => "labs.antigravity_summaries",
             Self::VocabularyBiasing => "labs.vocabulary_biasing",
             Self::TerminalPaste => "paste_with_shift",
             Self::KeyboardModelSwitching => "keyboard_model_switching.enabled",
@@ -536,6 +541,7 @@ impl Feature {
             Self::FailureNotices => settings.labs.failure_notices,
             Self::LiveTyping => settings.labs.live_typing,
             Self::LiveChapters => settings.labs.live_chapters,
+            Self::AntigravitySummaries => settings.labs.antigravity_summaries,
             Self::VocabularyBiasing => settings.labs.vocabulary_biasing,
             Self::TerminalPaste => settings.paste_with_shift,
             Self::KeyboardModelSwitching => settings.keyboard_model_switching.enabled,
@@ -621,6 +627,7 @@ impl Feature {
             &mut labs.failure_notices,
             &mut labs.live_typing,
             &mut labs.live_chapters,
+            &mut labs.antigravity_summaries,
             &mut labs.vocabulary_biasing,
             &mut labs.mouse_shortcuts,
             &mut labs.unload_idle,
@@ -700,6 +707,7 @@ impl Feature {
             Self::FailureNotices => settings.labs.failure_notices = on,
             Self::LiveTyping => settings.labs.live_typing = on,
             Self::LiveChapters => settings.labs.live_chapters = on,
+            Self::AntigravitySummaries => settings.labs.antigravity_summaries = on,
             Self::VocabularyBiasing => settings.labs.vocabulary_biasing = on,
             Self::TerminalPaste => settings.paste_with_shift = on,
             Self::KeyboardModelSwitching => settings.keyboard_model_switching.enabled = on,
@@ -908,6 +916,14 @@ pub fn window_dark(labs: &LabsSettings, system_dark: bool) -> bool {
 
 /// Records the switches the loaded or saved settings hold.
 pub(crate) fn apply(settings: &LabsSettings) {
+    ANTIGRAVITY_SUMMARIES.store(
+        1 + u8::from(
+            settings.antigravity_summaries
+                && Feature::AntigravitySummaries.shipped()
+                && Feature::AntigravitySummaries.managed().is_none(),
+        ),
+        Ordering::Release,
+    );
     STATE.store(encode(settings), Ordering::Release);
     // Labs › Pause from menu bar: turning it off resumes at once, without
     // waiting for the menu to refresh; the menu row hides itself there.
@@ -1150,6 +1166,26 @@ pub fn log_launch() {
 mod tests {
     use super::cli::resolve;
     use super::*;
+
+    #[test]
+    fn antigravity_summaries_are_off_by_default_and_available_to_everyone() {
+        let feature = Feature::AntigravitySummaries;
+        assert_eq!(feature.audience(), Audience::Everyone);
+        assert_eq!(feature.group(), Group::Meetings);
+        assert!(feature.on_this_os());
+        assert_eq!(feature.settings_key(), "labs.antigravity_summaries");
+        let mut settings = AppSettings::default();
+        assert!(!feature.on(&settings));
+        feature.set(&mut settings, true);
+        apply(&settings.labs);
+        assert!(antigravity_summaries());
+        let saved = serde_json::to_vec(&settings).unwrap();
+        let read: AppSettings = serde_json::from_slice(&saved).unwrap();
+        assert!(feature.on(&read));
+        feature.set(&mut settings, false);
+        apply(&settings.labs);
+        assert!(!antigravity_summaries());
+    }
 
     #[test]
     fn graduated_features_answer_by_name() {
@@ -1850,4 +1886,22 @@ mod tests {
         assert!(json["labs"].get("collapsible_meeting_sections").is_none());
         assert!(json["labs"].get("meeting_platform_icons").is_none());
     }
+}
+
+// STATE already uses all 64 bits. Keep this gate tri-state so a CLI reader
+// can lazily load saved Labs before the application has applied settings.
+static ANTIGRAVITY_SUMMARIES: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
+pub fn antigravity_summaries() -> bool {
+    if ANTIGRAVITY_SUMMARIES.load(Ordering::Acquire) == 0 {
+        let enabled = AppSettings::saved_labs().antigravity_summaries
+            && Feature::AntigravitySummaries.shipped()
+            && Feature::AntigravitySummaries.managed().is_none();
+        let _ = ANTIGRAVITY_SUMMARIES.compare_exchange(
+            0,
+            1 + u8::from(enabled),
+            Ordering::AcqRel,
+            Ordering::Acquire,
+        );
+    }
+    ANTIGRAVITY_SUMMARIES.load(Ordering::Acquire) == 2
 }

@@ -85,6 +85,7 @@ impl Feature {
             | Self::HistoryMultiSelect
             | Self::RecentDictations => Group::History,
             Self::Meetings
+            | Self::AntigravitySummaries
             | Self::LiveChapters
             | Self::SubtitleExport
             | Self::StopWhenCallEnds

@@ -131,6 +131,11 @@ impl Policy {
         if feature == crate::labs::Feature::AnnotateReplay && self.locks(Lock::Annotate) {
             return Some(Lock::Annotate);
         }
+        if feature == crate::labs::Feature::AntigravitySummaries
+            && self.locks(Lock::OpenCodeProcessing)
+        {
+            return Some(Lock::OpenCodeProcessing);
+        }
         self.locks(Lock::Labs).then_some(Lock::Labs)
     }
 
@@ -171,8 +176,13 @@ impl Policy {
                 *switch = false;
             }
         }
+        // Antigravity sends the transcript to a remote model too, so the
+        // OpenCode lock holds it off as well.
         if self.locks(Lock::OpenCodeProcessing)
-            && settings.meetings.summaries == MeetingSummaries::OpenCode
+            && matches!(
+                settings.meetings.summaries,
+                MeetingSummaries::OpenCode | MeetingSummaries::Antigravity
+            )
         {
             settings.meetings.summaries = MeetingSummaries::Off;
         }
@@ -192,9 +202,12 @@ impl Policy {
         }
         if self.locks(Lock::OpenCodeProcessing)
             && settings.meetings.summaries == MeetingSummaries::Off
-            && saved.meetings.summaries == MeetingSummaries::OpenCode
+            && matches!(
+                saved.meetings.summaries,
+                MeetingSummaries::OpenCode | MeetingSummaries::Antigravity
+            )
         {
-            settings.meetings.summaries = MeetingSummaries::OpenCode;
+            settings.meetings.summaries = saved.meetings.summaries;
         }
     }
 }

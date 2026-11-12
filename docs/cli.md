@@ -583,3 +583,39 @@ removed `permissions.input_monitoring` from the status reply; version 3 removed
 `voice-action` and `features.voice_action`; version 4 removed `commands-retry`,
 `settings-set.confirm`, `window-show` `commands`, `capture.recording` `voice`,
 `features.commands`, and `features.command_model`.
+
+## Antigravity account
+
+```sh
+hex antigravity login
+hex antigravity status
+hex antigravity logout
+hex settings set labs.antigravity_summaries true
+hex settings set meetings.summaries antigravity
+hex settings set meetings.antigravity_model gemini-3.8-flash
+```
+
+The Antigravity desktop client's OAuth secret is not in the repository. Hex
+reads it from `ANTIGRAVITY_CLIENT_SECRET`, else from
+`antigravity-client-secret.txt` in Hex's data folder (`%APPDATA%\hex` on
+Windows, `~/Library/Application Support/hex` on macOS, `~/.local/share/hex` on
+Linux); put it there once per computer. Without it, login fails with
+"Antigravity client secret missing" before the browser opens, and status says
+so.
+
+The account commands run locally without a running Hex. Login opens Google in
+the browser and accepts a state-checked PKCE callback on 127.0.0.1:51121 (redirect
+URI `http://localhost:51121/oauth-callback`), with a five-minute deadline. The port
+must be free. Status prints only the email or a sign-in hint. Logout removes the
+owner-only token file; it does not revoke Google's grant. Account commands return
+0 on success and 1 on failure. Settings commands use the running app as usual.
+The lab is required before selecting Antigravity. The selected model's failure
+does not fall back to OpenCode, Apple Intelligence, or another model.
+The default is `gemini-3.8-flash`. Settings preserve a saved Antigravity choice
+when its lab is switched off; the generator refuses it until re-enabled. Model
+IDs must be runtime identifiers (letters, numbers, dots, underscores or hyphens),
+not internal `MODEL_*`, `chat_*`, `tab_*` or image routes. Login/refresh persist
+`{refresh, access, expires, projectId, email}` in `antigravity.json` in Hex's data
+folder. Expiry includes a five-minute refresh margin. The local callback and
+network operations have deadlines; closing the CLI releases its listener. UI
+sign-in also offers Cancel. No Google call is required for `status` or `logout`.

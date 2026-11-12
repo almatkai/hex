@@ -78,10 +78,12 @@ pub struct MeetingSettings {
     /// picks a fast model.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub opencode_model: Option<String>,
+    #[serde(default = "default_antigravity_model")]
+    pub antigravity_model: String,
 }
 
-/// Who writes meeting titles and summaries. There is no fallback: Mac never
-/// sends the transcript to OpenCode, and OpenCode never runs on this Mac.
+/// Who writes meeting titles and summaries. Each writer is explicit, with
+/// no fallback to another writer after a failure.
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 #[repr(u8)]
@@ -92,6 +94,8 @@ pub enum MeetingSummaries {
     /// The OpenCode model, which the transcript is sent to.
     #[serde(rename = "opencode")]
     OpenCode = 2,
+    /// Google Antigravity, only with its Labs opt-in.
+    Antigravity = 3,
 }
 
 impl MeetingSummaries {
@@ -108,6 +112,7 @@ impl MeetingSummaries {
         match value {
             1 => Self::Mac,
             2 => Self::OpenCode,
+            3 => Self::Antigravity,
             _ => Self::Off,
         }
     }
@@ -327,6 +332,7 @@ impl Default for MeetingSettings {
             retention: None,
             audio_retention: None,
             opencode_model: None,
+            antigravity_model: default_antigravity_model(),
         }
     }
 }
@@ -540,4 +546,8 @@ mod tests {
         );
         assert_eq!(MeetingSettings::default().audio_retention, None);
     }
+}
+
+fn default_antigravity_model() -> String {
+    crate::antigravity::DEFAULT_MODEL.into()
 }

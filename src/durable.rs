@@ -29,6 +29,16 @@ pub(crate) fn sync_directory(directory: &Path) -> io::Result<()> {
 /// concurrent writers never share one. A symlinked `path` (settings kept in
 /// a dotfiles repository) stays a symlink: its final target is replaced.
 pub(crate) fn write(path: &Path, contents: &[u8]) -> io::Result<()> {
+    write_mode(path, contents, false)
+}
+
+/// Atomic secret write; staging and final file are owner-only on Unix.
+/// Windows inherits the per-user Application Support ACL.
+pub(crate) fn write_private(path: &Path, contents: &[u8]) -> io::Result<()> {
+    write_mode(path, contents, true)
+}
+
+fn write_mode(path: &Path, contents: &[u8], private: bool) -> io::Result<()> {
     let path = &symlink_target(path)?;
     let parent = path
         .parent()
@@ -36,7 +46,19 @@ pub(crate) fn write(path: &Path, contents: &[u8]) -> io::Result<()> {
         .unwrap_or(Path::new("."));
     let staging = staging_path(path);
     let written = (|| {
-        let mut file = fs::File::create(&staging)?;
+        let mut options = OpenOptions::new();
+        options.write(true);
+        if private {
+            // A staging file a crashed process left behind (same pid, same
+            // sequence) must not block the write or keep looser permissions.
+            let _ = fs::remove_file(&staging);
+            options.create_new(true);
+            #[cfg(unix)]
+            std::os::unix::fs::OpenOptionsExt::mode(&mut options, 0o600);
+        } else {
+            options.create(true).truncate(true);
+        }
+        let mut file = options.open(&staging)?;
         file.write_all(contents)?;
         file.sync_all()
     })();

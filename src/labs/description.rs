@@ -18,6 +18,9 @@ impl Feature {
             Self::LiveTyping => {
                 "Show provisional words in the focused text field while dictating on Wayland, then type the final text there"
             }
+            Self::AntigravitySummaries => {
+                "Write meeting summaries with your Google Antigravity account"
+            }
             Self::LiveChapters => "Break meeting transcripts into chapters while recording",
             Self::VocabularyBiasing => {
                 "Bias Parakeet transcription toward your vocabulary; rewriting and search use it either way"

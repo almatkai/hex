@@ -802,6 +802,7 @@ impl AppSettings {
         );
         MEETING_SUMMARIES.store(self.meetings.summaries as u8, Ordering::Release);
         crate::meeting::generator::set_summary_model(self.meetings.opencode_model.as_deref());
+        crate::antigravity::set_model(&self.meetings.antigravity_model);
         MEETING_INDICATOR_ENABLED.store(self.meetings.show_recording_indicator, Ordering::Release);
         MEETING_INDICATOR_CORNER.store(
             self.meetings.recording_indicator_corner as u8,

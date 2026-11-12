@@ -1,7 +1,7 @@
 //! What writes meeting titles, summaries, and live chapters: exactly the
 //! writer Meetings › Settings › Summaries names, Apple Intelligence on this
-//! Mac or the OpenCode model, with no fallback from one to the other.
-//! OpenCode receives the transcript excerpt, so it is opt-in on every OS.
+//! Mac, OpenCode, or Antigravity. Remote writers receive the transcript
+//! excerpt only when explicitly selected; writers never fall back.
 
 use std::sync::RwLock;
 use std::sync::atomic::AtomicBool;
@@ -33,6 +33,9 @@ pub struct GeneratedNotes {
 #[serde(tag = "writer", rename_all = "snake_case")]
 pub enum NotesWriter {
     AppleIntelligence,
+    Antigravity {
+        model: String,
+    },
     #[serde(rename = "opencode")]
     OpenCode {
         /// `provider/model`, when Hex named the model; `None` when
@@ -83,6 +86,7 @@ enum Writer {
     #[cfg(target_os = "macos")]
     AppleIntelligence,
     OpenCode,
+    Antigravity,
 }
 
 /// The writer for a meeting's notes now: the one Summaries names, or, with
@@ -104,12 +108,28 @@ fn decide(
     opencode_running: impl FnOnce() -> bool,
 ) -> Result<Writer, String> {
     match summaries {
+        MeetingSummaries::Antigravity => {
+            antigravity_writer(crate::labs::antigravity_summaries(), || {
+                crate::antigravity::email().is_some()
+            })
+        }
         MeetingSummaries::Mac => on_this_mac(),
         MeetingSummaries::OpenCode if opencode_running() => Ok(Writer::OpenCode),
         MeetingSummaries::OpenCode => Err("OpenCode isn't running".into()),
         MeetingSummaries::Off => on_this_mac()
             .map_err(|_| "Turn on Summaries in Meetings › Settings to write meeting notes".into()),
     }
+}
+
+fn antigravity_writer(enabled: bool, signed_in: impl FnOnce() -> bool) -> Result<Writer, String> {
+    use crate::desktop::i18n::tr;
+    if !enabled {
+        return Err(tr("Turn on Antigravity summaries in Labs").into());
+    }
+    if !signed_in() {
+        return Err(tr("Sign in to Antigravity").into());
+    }
+    Ok(Writer::Antigravity)
 }
 
 /// Apple Intelligence, or why it can't write notes.
@@ -152,7 +172,7 @@ pub(crate) fn context_tokens() -> usize {
     match writer() {
         #[cfg(target_os = "macos")]
         Ok(Writer::AppleIntelligence) => crate::apple_intelligence::context_tokens(),
-        Ok(Writer::OpenCode) => OPENCODE_CONTEXT_TOKENS,
+        Ok(Writer::OpenCode | Writer::Antigravity) => OPENCODE_CONTEXT_TOKENS,
         Err(_) => 0,
     }
 }
@@ -172,8 +192,23 @@ pub(crate) fn generate_notes(
                 ..notes
             })
         }
-        Writer::OpenCode => {
+        Writer::Antigravity => {
+            let model = crate::antigravity::model();
+            let notes: GeneratedNotes = antigravity_json(
+                &model,
+                instructions,
+                prompt,
+                r#"{"title": "...", "summary": "..."}"#,
+                timeout,
+            )?;
+            Ok(GeneratedNotes {
+                written_by: Some(NotesWriter::Antigravity { model }),
+                ..notes
+            })
+        }
+        writer @ Writer::OpenCode => {
             let (notes, model) = opencode_reporting::<GeneratedNotes>(
+                writer,
                 instructions,
                 prompt,
                 r#"{"title": "...", "summary": "..."}"#,
@@ -200,8 +235,8 @@ pub(crate) fn generate_title(
         Writer::AppleIntelligence => {
             crate::apple_intelligence::generate_title(instructions, prompt, timeout)
         }
-        Writer::OpenCode => {
-            opencode::<GeneratedNotes>(instructions, prompt, r#"{"title": "..."}"#, timeout)
+        writer @ (Writer::OpenCode | Writer::Antigravity) => {
+            opencode::<GeneratedNotes>(writer, instructions, prompt, r#"{"title": "..."}"#, timeout)
                 .map(|notes| notes.title)
         }
     }
@@ -218,7 +253,8 @@ pub(crate) fn generate_chapter(
         Writer::AppleIntelligence => {
             crate::apple_intelligence::generate_chapter(instructions, prompt, timeout)
         }
-        Writer::OpenCode => opencode(
+        writer @ (Writer::OpenCode | Writer::Antigravity) => opencode(
+            writer,
             instructions,
             prompt,
             r#"{"title": "...", "summary": "...", "same_topic": true}"#,
@@ -238,7 +274,8 @@ pub(crate) fn generate_chapter_lines(
         Writer::AppleIntelligence => {
             crate::apple_intelligence::generate_chapter_lines(instructions, prompt, timeout)
         }
-        Writer::OpenCode => opencode::<GeneratedChapterLines>(
+        writer @ (Writer::OpenCode | Writer::Antigravity) => opencode::<GeneratedChapterLines>(
+            writer,
             instructions,
             prompt,
             r#"{"lines": [12, 13]}"#,
@@ -248,23 +285,35 @@ pub(crate) fn generate_chapter_lines(
     }
 }
 
-/// One OpenCode generation answered as JSON of `shape`.
+/// One remote generation answered as JSON of `shape`.
 fn opencode<T: DeserializeOwned>(
+    writer: Writer,
     instructions: &str,
     prompt: &str,
     shape: &str,
     timeout: Duration,
 ) -> Result<T, GenerationError> {
-    opencode_reporting(instructions, prompt, shape, timeout).map(|(answer, _)| answer)
+    opencode_reporting(writer, instructions, prompt, shape, timeout).map(|(answer, _)| answer)
 }
 
 /// [`opencode`], with the model that answered when Hex named one.
 fn opencode_reporting<T: DeserializeOwned>(
+    writer: Writer,
     instructions: &str,
     prompt: &str,
     shape: &str,
     timeout: Duration,
 ) -> Result<(T, Option<Model>), GenerationError> {
+    if writer == Writer::Antigravity {
+        return antigravity_json(
+            &crate::antigravity::model(),
+            instructions,
+            prompt,
+            shape,
+            timeout,
+        )
+        .map(|answer| (answer, None));
+    }
     let request = format!(
         "{instructions}\n\n{prompt}\n\nAnswer with only a JSON object shaped like {shape}, \
          without code fences or any other text."
@@ -283,6 +332,28 @@ fn opencode_reporting<T: DeserializeOwned>(
             .map_err(|error| GenerationError::Failed(format!("{error:#}")))?,
     };
     Ok((parse_json(&generated.text)?, generated.model))
+}
+
+fn antigravity_json<T: DeserializeOwned>(
+    model: &str,
+    instructions: &str,
+    prompt: &str,
+    shape: &str,
+    timeout: Duration,
+) -> Result<T, GenerationError> {
+    let prompt = format!(
+        "{prompt}\n\nAnswer with only a JSON object shaped like {shape}, \
+         without code fences or any other text."
+    );
+    let text = crate::antigravity::generate(
+        model,
+        instructions,
+        &prompt,
+        timeout,
+        &AtomicBool::new(false),
+    )
+    .map_err(|e| GenerationError::Failed(e.to_string()))?;
+    parse_json(&text)
 }
 
 /// The saved `meetings.opencode_model`, as settings last applied it.
@@ -327,18 +398,51 @@ fn parse_json<T: DeserializeOwned>(text: &str) -> Result<T, GenerationError> {
         (Some(start), Some(end)) if start < end => &text[start..=end],
         _ => {
             return Err(GenerationError::Failed(
-                "OpenCode answered without JSON".into(),
+                crate::desktop::i18n::tr("The summary writer answered without JSON").into(),
             ));
         }
     };
-    serde_json::from_str(object).map_err(|error| {
-        GenerationError::Failed(format!("OpenCode answered invalid JSON: {error}"))
+    serde_json::from_str(object).map_err(|_| {
+        // serde errors can quote answer text. Never expose them to logs.
+        GenerationError::Failed(
+            crate::desktop::i18n::tr("The summary writer answered invalid JSON").into(),
+        )
     })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn antigravity_needs_its_lab_and_account_and_never_selects_another_writer() {
+        assert!(
+            antigravity_writer(false, || panic!("off never reads the account"))
+                .unwrap_err()
+                .contains("Labs")
+        );
+        assert_eq!(
+            antigravity_writer(true, || false).unwrap_err(),
+            "Sign in to Antigravity"
+        );
+        assert_eq!(antigravity_writer(true, || true), Ok(Writer::Antigravity));
+        let provenance = NotesWriter::Antigravity {
+            model: "gemini-3.8-flash".into(),
+        };
+        let json = serde_json::to_value(&provenance).unwrap();
+        assert_eq!(json["writer"], "antigravity");
+        assert_eq!(
+            serde_json::from_value::<NotesWriter>(json).unwrap(),
+            provenance
+        );
+    }
+
+    #[test]
+    fn invalid_summary_json_errors_never_quote_answer_text() {
+        let error =
+            parse_json::<GeneratedNotes>(r#"{"title": ["private answer text"]}"#).unwrap_err();
+        assert!(!error.to_string().contains("private answer text"));
+    }
 
     #[test]
     fn answers_are_read_through_fences_and_prose() {

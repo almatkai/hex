@@ -7,8 +7,10 @@
 //! heard no speech. Nothing here launches Hex except `start` and `restart`.
 
 use std::io::Write;
+mod antigravity;
 mod human;
 mod transcribe;
+use antigravity::AntigravityAction;
 
 use clap::{Args, Subcommand};
 
@@ -31,6 +33,11 @@ pub struct Output {
 /// The control commands at the top of `hex`.
 #[derive(Subcommand, Debug)]
 pub enum ControlCli {
+    /// Sign in to Google Antigravity for meeting summaries.
+    Antigravity {
+        #[arg(value_enum)]
+        action: AntigravityAction,
+    },
     /// Show what the running Hex is doing.
     ///
     /// Recording, meeting, model, features, permissions, window, version,
@@ -413,6 +420,7 @@ pub fn finish(code: u8) -> ! {
 
 pub fn run(command: ControlCli) -> u8 {
     match command {
+        ControlCli::Antigravity { action } => antigravity::run(action),
         ControlCli::Status { output } => send(ControlCommand::Status, output),
         ControlCli::Start { output } => start(output),
         ControlCli::Quit { force, output } => send(ControlCommand::Quit { force }, output),

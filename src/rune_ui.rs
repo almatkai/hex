@@ -41,6 +41,7 @@ pub(crate) use self::meetings::meeting_import_failed;
 mod captures;
 mod meetings_host;
 pub(crate) use meetings_host::{meeting_corner_moved, meeting_failed, meeting_provider_chosen};
+mod antigravity;
 mod model_details;
 mod model_import;
 mod models;
@@ -671,6 +672,7 @@ pub(crate) struct Ui {
     draft_since: Option<Instant>,
     duck_volume_drag: Option<f32>,
     models: models::Models,
+    antigravity: antigravity::Account,
     history: history::HistoryPane,
     #[cfg(hex_capture)]
     captures: captures::CapturesPane,
@@ -789,6 +791,7 @@ impl Ui {
             draft_since: None,
             duck_volume_drag: None,
             models: models::Models::default(),
+            antigravity: antigravity::Account::default(),
             history: history::HistoryPane::default(),
             #[cfg(hex_capture)]
             captures: captures::CapturesPane::default(),
@@ -1257,6 +1260,14 @@ fn poll(ui: &mut Ui, clock: f64, tx: &mut Tx) -> bool {
     let now = Instant::now();
     let mut changed = ui.save_drafts(now);
     changed |= paste_access::poll(ui);
+    changed |= ui.antigravity.poll(
+        ui.live()
+            && !ui.labs_open
+            && ui.pane == Pane::Meetings
+            && ui.settings.labs.antigravity_summaries
+            && ui.settings.meetings.summaries == crate::app_settings::MeetingSummaries::Antigravity
+            && ui.window.as_ref().is_some_and(rune::AppHandle::is_visible),
+    );
     // The OpenCode catalog is read only while a pane that uses it shows:
     // Modes, or Meetings › Settings while OpenCode writes the summaries.
     changed |= ui.models.poll(

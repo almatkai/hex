@@ -646,7 +646,17 @@ pub(super) const KEYS: &[Key] = &[
     key(
         "meetings.summaries",
         SUMMARIES,
-        "Who titles and summarizes meetings: off, mac (Apple Intelligence, nothing leaves this Mac), or opencode (sends the transcript to the OpenCode model)",
+        "Who titles and summarizes meetings: off, mac (Apple Intelligence), opencode, or antigravity (requires Labs); remote writers receive the transcript",
+    ),
+    key(
+        "labs.antigravity_summaries",
+        Kind::Bool,
+        "Labs: Antigravity summaries",
+    ),
+    key(
+        "meetings.antigravity_model",
+        Kind::Text,
+        "Antigravity model for meeting summaries",
     ),
     optional(
         "meetings.opencode_model",
@@ -834,9 +844,9 @@ pub(super) const CAPTURE_KEYS: &[Key] = &[];
 const RETENTION_DAYS: Kind = Kind::Integer { min: 1, max: 3650 };
 
 #[cfg(target_os = "macos")]
-const SUMMARIES: Kind = Kind::Choice(&["off", "mac", "opencode"]);
+const SUMMARIES: Kind = Kind::Choice(&["off", "mac", "opencode", "antigravity"]);
 #[cfg(not(target_os = "macos"))]
-const SUMMARIES: Kind = Kind::Choice(&["off", "opencode"]);
+const SUMMARIES: Kind = Kind::Choice(&["off", "opencode", "antigravity"]);
 
 /// Keys that were replaced, and what replaced them.
 pub(super) const RETIRED: &[(&str, &str)] = &[
