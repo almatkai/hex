@@ -325,6 +325,12 @@ fn rows(ui: &Ui) -> Vec<Row> {
         None => row(feature, icon, title, about),
     };
     let mut rows = Vec::new();
+    rows.push(row(
+        Feature::AntigravitySummaries,
+        None,
+        tr("Antigravity summaries"),
+        tr("Write meeting summaries with your Google Antigravity account"),
+    ));
     if caps.meetings {
         rows.push(row(
             Feature::Meetings,
@@ -900,6 +906,7 @@ fn row_key(lab: Lab) -> &'static str {
         Feature::FailureNotices => "lab-failure-notices",
         Feature::LiveTyping => "lab-live-typing",
         Feature::LiveChapters => "lab-live-chapters",
+        Feature::AntigravitySummaries => "lab-antigravity-summaries",
         Feature::VocabularyBiasing => "lab-vocabulary-biasing",
         Feature::TerminalPaste => "lab-terminal-paste",
         Feature::KeyboardModelSwitching => "lab-keyboard-model-switching",

@@ -8,6 +8,38 @@ use serde::Deserialize;
 use serde_json::json;
 use std::sync::atomic::Ordering;
 
+#[test]
+fn antigravity_settings_round_trip_and_unknown_writers_recover_one_field() {
+    let mut settings = AppSettings::default();
+    settings.meetings.summaries = MeetingSummaries::Antigravity;
+    settings.meetings.antigravity_model = "claude-sonnet-4-6".into();
+    settings.labs.antigravity_summaries = true;
+    settings.microphone = Some("Saved microphone".into());
+    let bytes = serde_json::to_vec(&settings).unwrap();
+    let (read, repaired) = decode(&bytes);
+    assert!(!repaired);
+    assert_eq!(read.meetings.summaries, MeetingSummaries::Antigravity);
+    assert_eq!(read.meetings.antigravity_model, "claude-sonnet-4-6");
+    // The pre-Antigravity build uses this same recovery loop: an unknown
+    // writer drops only summaries, preserving all other settings and bytes.
+    let mut value: Value = serde_json::from_slice(&bytes).unwrap();
+    value["meetings"]["summaries"] = "future_writer".into();
+    let (older, repaired) = decode(&serde_json::to_vec(&value).unwrap());
+    assert!(repaired);
+    assert_eq!(
+        older.meetings.summaries,
+        MeetingSummaries::platform_default()
+    );
+    assert_eq!(older.microphone, settings.microphone);
+    assert_eq!(older.meetings.antigravity_model, "claude-sonnet-4-6");
+    let older: AppSettings = serde_json::from_slice(b"{}").unwrap();
+    assert_eq!(
+        older.meetings.antigravity_model,
+        crate::antigravity::DEFAULT_MODEL
+    );
+    assert!(!older.labs.antigravity_summaries);
+}
+
 struct SettingsFile {
     path: PathBuf,
 }

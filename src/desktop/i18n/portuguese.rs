@@ -10,11 +10,18 @@ use std::sync::OnceLock;
 /// The Portuguese strings by their English source.
 pub(super) fn table() -> &'static HashMap<&'static str, &'static str> {
     static TABLE: OnceLock<HashMap<&'static str, &'static str>> = OnceLock::new();
-    TABLE.get_or_init(|| TRANSLATIONS.iter().copied().collect())
+    TABLE.get_or_init(|| {
+        TRANSLATIONS
+            .iter()
+            .copied()
+            .chain(super::antigravity::extra(0))
+            .collect()
+    })
 }
 
 #[rustfmt::skip]
 const TRANSLATIONS: &[(&str, &str)] = &[
+
     ("Hex picks a fast model", "O Hex escolhe um modelo rápido"),
     ("Follow live transcript", "Acompanhar a transcrição ao vivo"),
     ("More call apps", "Mais apps de chamada"),

@@ -172,6 +172,22 @@ const PATHS: &[(&str, &str)] = &[
     ("meetings-empty", "Window/Meetings/Empty"),
     ("meetings-off", "Window/Meetings/Off"),
     ("meetings-settings", "Window/Meetings/Settings"),
+    (
+        "meetings-antigravity",
+        "Window/Meetings/Antigravity sign in",
+    ),
+    (
+        "meetings-antigravity-signed-in",
+        "Window/Meetings/Antigravity account",
+    ),
+    (
+        "windows-meetings-antigravity",
+        "Window/Meetings/Antigravity on Windows",
+    ),
+    (
+        "linux-meetings-antigravity",
+        "Window/Meetings/Antigravity on Linux",
+    ),
     ("meetings-summaries", "Window/Meetings/Summaries"),
     (
         "meetings-summaries-unavailable",

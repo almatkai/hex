@@ -68,6 +68,7 @@ pub struct LabsSettings {
     /// preedit, with the final text committed there (Linux Wayland).
     pub live_typing: bool,
     pub live_chapters: bool,
+    pub antigravity_summaries: bool,
     pub playground: bool,
     /// Parakeet transcription biased toward the vocabulary.
     pub vocabulary_biasing: bool,
@@ -230,6 +231,7 @@ impl Default for LabsSettings {
             failure_notices: false,
             live_typing: false,
             live_chapters: false,
+            antigravity_summaries: false,
             playground: false,
             vocabulary_biasing: false,
             mouse_shortcuts: false,

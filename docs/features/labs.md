@@ -2868,3 +2868,14 @@ Checks: `labs_is_one_flat_list_of_toggles_off_by_default`,
 [control/settings.rs](../../src/control/settings.rs). Passed on Linux on
 2026-10-30; the macOS build was not checked, and the Windows build was
 type-checked only.
+
+### Antigravity summaries
+
+`labs.antigravity_summaries` is off by default, audience Everyone on all three
+OSes, in the Meetings group. It reveals the Antigravity summary writer, Google
+sign-in and model controls. The generator rejects this writer when the gate is
+off, without substituting a different writer. See [Meetings](meetings.md#antigravity-summaries-labs).
+`hex settings set labs.antigravity_summaries true` enables the same gate; the
+`antigravity_summaries_are_off_by_default_and_available_to_everyone` test checks
+its default, audience, group, round trip and runtime switch. The generator and
+pane availability check the lab and signed-in account separately.

@@ -156,20 +156,35 @@ pub(super) fn available(ui: &Ui) -> bool {
 /// Whether something can write a meeting's notes when asked: OpenCode once
 /// Summaries chooses it, otherwise Apple Intelligence on a Mac that has it.
 fn notes_available(ui: &Ui) -> bool {
-    ui.settings.meetings.summaries == crate::app_settings::MeetingSummaries::OpenCode
-        || apple_intelligence_writes(ui)
+    match ui.settings.meetings.summaries {
+        crate::app_settings::MeetingSummaries::Antigravity => {
+            ui.settings.labs.antigravity_summaries
+                && crate::labs::Feature::AntigravitySummaries
+                    .managed()
+                    .is_none()
+                && ui.antigravity.signed_in()
+        }
+        crate::app_settings::MeetingSummaries::OpenCode => true,
+        _ => apple_intelligence_writes(ui),
+    }
 }
 
 /// Whether Apple Intelligence writes notes asked for now: Summaries isn't
 /// OpenCode and this Mac has it.
 fn apple_intelligence_writes(ui: &Ui) -> bool {
-    ui.settings.meetings.summaries != crate::app_settings::MeetingSummaries::OpenCode
-        && ui.platform.caps.os == super::platform::Os::Macos
+    !matches!(
+        ui.settings.meetings.summaries,
+        crate::app_settings::MeetingSummaries::OpenCode
+            | crate::app_settings::MeetingSummaries::Antigravity
+    ) && ui.platform.caps.os == super::platform::Os::Macos
         && ui.platform.notes.is_available()
 }
 
 /// What writes the notes now, as the generator picks it.
 fn notes_running_label(ui: &Ui) -> &'static str {
+    if ui.settings.meetings.summaries == crate::app_settings::MeetingSummaries::Antigravity {
+        return tr("Writing a title and summary with Antigravity…");
+    }
     if apple_intelligence_writes(ui) {
         tr("Writing a title and summary with Apple Intelligence…")
     } else {
@@ -1239,6 +1254,26 @@ pub(super) fn turn_line(p: Paint, index: usize, turn: &Turn, imported: bool) -> 
 
 #[cfg(all(test, not(target_os = "macos")))]
 mod tests {
+    #[test]
+    fn antigravity_notes_need_the_lab_and_a_signed_in_account() {
+        use super::*;
+        let mut ui = Ui::with(
+            crate::app_settings::AppSettings::default(),
+            Service::Fixture(Vec::new()),
+        );
+        ui.settings.meetings.summaries = crate::app_settings::MeetingSummaries::Antigravity;
+        assert!(!notes_available(&ui));
+        ui.settings.labs.antigravity_summaries = true;
+        assert!(!notes_available(&ui));
+        ui.antigravity = crate::rune_ui::antigravity::Account::fixture(true);
+        assert!(notes_available(&ui));
+        assert_eq!(
+            notes_running_label(&ui),
+            "Writing a title and summary with Antigravity…"
+        );
+        ui.settings.labs.antigravity_summaries = false;
+        assert!(!notes_available(&ui));
+    }
     use super::*;
     use crate::rune_ui::Service;
     use crate::rune_ui::platform::PlatformHost;

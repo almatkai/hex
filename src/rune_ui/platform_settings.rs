@@ -266,9 +266,16 @@ fn summaries_rows(ui: &Ui, p: Paint, layer: &mut Vec<El>) -> Vec<CardRow> {
     let chosen = ui.settings.meetings.summaries;
     let managed = opencode_managed();
     let mut rows: Vec<CardRow> = Vec::new();
-    if ui.platform.caps.os == Os::Macos {
+    if ui.platform.caps.os == Os::Macos || ui.settings.labs.antigravity_summaries {
         let notes = ui.platform.notes;
         let (description, color) = match chosen {
+            MeetingSummaries::Antigravity if !ui.settings.labs.antigravity_summaries => {
+                (tr("Turn on Antigravity summaries in Labs"), p.warning())
+            }
+            MeetingSummaries::Antigravity => (
+                tr("Sends the transcript to your Google account's Antigravity"),
+                p.muted(),
+            ),
             MeetingSummaries::Off => (tr("No titles or summaries"), p.muted()),
             MeetingSummaries::Mac if notes.is_available() => (notes_description(notes), p.muted()),
             MeetingSummaries::Mac => (notes_description(notes), p.warning()),
@@ -280,8 +287,9 @@ fn summaries_rows(ui: &Ui, p: Paint, layer: &mut Vec<El>) -> Vec<CardRow> {
             MeetingSummaries::Off => tr("Off"),
             MeetingSummaries::Mac => tr("On this Mac"),
             MeetingSummaries::OpenCode => "OpenCode",
+            MeetingSummaries::Antigravity => tr("Antigravity"),
         };
-        let options = [
+        let mut options = vec![
             SummariesOption {
                 choice: MeetingSummaries::Off,
                 detail: None,
@@ -302,6 +310,18 @@ fn summaries_rows(ui: &Ui, p: Paint, layer: &mut Vec<El>) -> Vec<CardRow> {
                 disabled: managed,
             },
         ];
+        if ui.platform.caps.os != Os::Macos {
+            options.retain(|o| o.choice != MeetingSummaries::Mac);
+        }
+        if ui.settings.labs.antigravity_summaries {
+            options.push(SummariesOption {
+                choice: MeetingSummaries::Antigravity,
+                detail: Some(tr(
+                    "Sends the transcript to your Google account's Antigravity",
+                )),
+                disabled: false,
+            });
+        }
         let menu = Menu::Pick("meeting-summaries");
         let labels: Vec<&str> = options.iter().map(|option| label(option.choice)).collect();
         let trigger = rune_kit::Select::new("meeting-summaries-control", &labels)
@@ -390,6 +410,9 @@ fn summaries_rows(ui: &Ui, p: Paint, layer: &mut Vec<El>) -> Vec<CardRow> {
         Vec::new()
     };
     rows.push(folding("summary-model", model));
+    if ui.settings.labs.antigravity_summaries && chosen == MeetingSummaries::Antigravity {
+        rows.extend(super::antigravity::rows(ui, p, layer));
+    }
     rows
 }
 

@@ -1852,6 +1852,14 @@ fn platform_goldens() {
         check_golden("meetings-summary-model", dark, (980.0, 1800.0));
         check_golden("meetings-summary-model-not-running", dark, (980.0, 1800.0));
         for scene in [
+            "meetings-antigravity",
+            "meetings-antigravity-signed-in",
+            "windows-meetings-antigravity",
+            "linux-meetings-antigravity",
+        ] {
+            check_golden(scene, dark, (980.0, 1800.0));
+        }
+        for scene in [
             "mac-settings",
             "mac-input-source-models",
             "meetings",

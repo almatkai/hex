@@ -12,6 +12,7 @@ pub enum Feature {
     FailureNotices,
     LiveTyping,
     LiveChapters,
+    AntigravitySummaries,
     VocabularyBiasing,
     TerminalPaste,
     KeyboardModelSwitching,
@@ -81,7 +82,7 @@ pub enum Feature {
 }
 
 impl Feature {
-    pub const ALL: [Self; 73] = [
+    pub const ALL: [Self; 74] = [
         Self::Meetings,
         Self::VoiceFilter,
         Self::Playground,
@@ -89,6 +90,7 @@ impl Feature {
         Self::FailureNotices,
         Self::LiveTyping,
         Self::LiveChapters,
+        Self::AntigravitySummaries,
         Self::VocabularyBiasing,
         Self::TerminalPaste,
         Self::KeyboardModelSwitching,

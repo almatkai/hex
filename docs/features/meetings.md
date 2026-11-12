@@ -1749,3 +1749,94 @@ Granola import: see [granola-import.md](../plans/granola-import.md).
   tuned on that transcript; the model's same-topic flag is unreliable, and a
   short detour can still become its own chapter. The boundary pass runs only
   when meeting notes run, after publication.
+
+## Antigravity summaries (Labs)
+
+```ts
+Labs › Meetings › Antigravity summaries (off by default) // meetings.antigravity
+└── Meetings › Settings › Summaries › Antigravity (macOS, Windows, Linux)
+    ├── Sign in with Google → browser OAuth + PKCE → local callback (5 minutes)
+    ├── Signed-in email + Sign out; Model → Google catalog, fixed list if unavailable
+    ├── Transcript excerpt → Google Antigravity → title, summary, chapters
+    └── Lab off, signed out, quota, or request failure → no other writer is tried
+```
+
+`meetings.antigravity_model` defaults to `gemini-3.8-flash`. Text is sent to the
+Google account's Antigravity, with no tools. The utility worker and dictation
+yield policy are unchanged. `antigravity.json` under Application Support holds
+the refresh token, access token, early expiry, project ID, and email. Writes use
+`durable::write_private` (0600 on Unix; inherited per-user APPDATA ACL on Windows).
+Sign out deletes it. Tokens, OAuth codes, transcript and answer bodies are never
+logged. A 401 asks for sign-in again; a 429 reports quota. Existing builds recover
+an unknown summaries enum through their per-field settings recovery, retaining
+other settings and recovering Summaries to that build's platform default. An old
+build cannot retain the Antigravity selection after saving settings.
+
+`labs.antigravity_summaries` reveals this writer; `meetings.summaries=antigravity`
+selects it. The picker otherwise keeps Off / On this Mac / OpenCode on macOS
+and the existing OpenCode switch on Windows and Linux. The account row says
+"Sign in to Antigravity" when signed out, and the writer's subtitle is "Sends
+the transcript to your Google account's Antigravity". The fallback model list is
+`gemini-3.8-flash`, `gemini-3.5-flash`, `gemini-3.1-pro`,
+`claude-sonnet-4-6`, `claude-opus-4-6`, `gpt-oss-120b`. A live catalog uses its
+runtime IDs, excluding internal and image routes. A failed selected model never
+switches to another model.
+
+The native Rust client uses `net` for platform TLS, proxy settings and bounded
+HTTP, never a helper process. It tries daily, sandbox daily, then cloudcode-pa
+endpoints, with a fresh session identity for each generation attempt. A
+generation moves on only when an endpoint answers 403, 404 or 5xx or can't be
+reached; anything the stream itself reports (a block, a length stop, no text)
+is final, so the transcript is never sent twice for it. The macOS
+`DisableOpenCodeProcessing` policy also holds Antigravity off, since it sends
+the transcript to a remote model too. Responses
+are capped at 4 MiB; missing completion, malformed SSE and truncated responses
+fail without publishing partial notes. Cancelling abandons the result promptly;
+the bounded HTTP worker stops on its read or overall deadline, without saving or
+retrying. Credential refresh and sign-out share a cross-process file lock, so a
+CLI logout cannot race an app refresh into restoring the token file.
+
+Sources: `src/antigravity.rs`, `src/antigravity/{auth,wire}.rs`,
+`src/meeting/generator.rs`, `src/rune_ui/antigravity.rs`. Fake loopback HTTP tests
+cover the envelope, split SSE, model discovery, project discovery, endpoint
+fallback and fresh retry identities, persisted token refresh, callback state,
+timeout and cancellation, credential locks, and durable private writes. Generator
+checks cover the lab/account gate and provenance. Settings checks cover keys,
+round trips, and per-field recovery of an unknown writer. These are protocol checks;
+no live Google sign-in or generation has been verified. Windows ACLs follow the
+same inherited ACL contract as local-api.json; the tests inspect Unix mode only.
+
+Golden regeneration is Linux-only and was not attempted on this Windows host.
+The Labs catalog card, counts and New badge affect `mac-labs`, `mac-labs-link`,
+`mac-labs-on`, `mac-labs-category`, `mac-labs-search`, `mac-labs-settings`,
+`mac-labs-screenshots`, `windows-labs`, and `linux-labs` as their filters expose
+those changes. Existing Meetings settings fixtures keep the lab off. The new
+`meetings-antigravity`, `meetings-antigravity-signed-in`,
+`windows-meetings-antigravity`, and `linux-meetings-antigravity` scenes need
+Linux goldens in both appearances. They contain fixture accounts and never read
+credentials or make a network request. Windows/macOS browser handoff and native
+Google sign-in/generation remain unverified.
+
+Observed locally on Windows, 2026-11-13: `cargo clippy --locked --bin hex --
+-D warnings` passed. The combined `antigravity`, `meeting::generator`, `labs`,
+`settings`, `i18n`, `control`, and `code_shape` filters ran 295 tests: 292 passed;
+only these three previously identified Russian-locale default-model tests failed:
+`app_settings::persistence::tests::launch_publishes_the_saved_selection_before_the_worker_starts`
+(GigaAmV3/ru versus ParakeetUnifiedEnglish/en),
+`app_settings::tests::invalid_remembered_languages_are_not_offered_by_model_switching`
+("ru" versus "en"), and
+`app_settings::tests::model_switches_remember_language_without_changing_other_settings`
+(3 versus 2). `code-shape.py --check` passed its hard limits. Tests used temporary
+`HEX_APPLICATION_SUPPORT_DIR`, `APPDATA`, and `LOCALAPPDATA`; no Google request
+or GitHub Actions run was made. Cargo-nextest was unavailable, so verification
+used the repository's cargo-test fallback with one test thread.
+The two `durable` tests and `cargo fmt --all --check` also passed. The built
+Windows CLI returned 0 for isolated `antigravity status` ("Sign in to
+Antigravity") and `logout`. All four Antigravity scenes rendered and were
+inspected in light and dark on Windows; these are shared-UI fixtures, not native
+macOS/Linux verification or a Google sign-in test.
+The `mac-labs`, `windows-labs`, and `linux-labs` fixtures were also rendered and
+inspected in both appearances, including the new card's default-off switch.
+After the final callback charset and translated Markdown attribution changes,
+Clippy passed again and all 85 focused Antigravity, generator, meeting-notes and
+i18n tests passed.

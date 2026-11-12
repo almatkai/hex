@@ -466,6 +466,10 @@ pub(super) fn notes_file_footer(writer: Option<&NotesWriter>) -> String {
 
 fn notes_footer_for(writer: Option<&NotesWriter>, details: &str, without_a_writer: &str) -> String {
     match writer {
+        Some(NotesWriter::Antigravity { model }) => crate::desktop::i18n::tr_named(
+            "Written by Antigravity ({model}). {details}",
+            &[("model", model.as_str()), ("details", details)],
+        ),
         Some(NotesWriter::AppleIntelligence) => {
             format!("Written on this Mac by Apple Intelligence; {details}")
         }

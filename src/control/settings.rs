@@ -289,6 +289,22 @@ pub fn apply(
     let mut effects = Vec::new();
     let message = format!("Set {name}");
     match key.key {
+        "meetings.antigravity_model"
+            if candidate.meetings.antigravity_model.len() > 256
+                || !crate::antigravity::valid_model_id(&candidate.meetings.antigravity_model) =>
+        {
+            return Err(invalid(
+                name,
+                "use an Antigravity model id such as gemini-3.8-flash",
+            ));
+        }
+        "meetings.summaries"
+            if candidate.meetings.summaries
+                == crate::app_settings::MeetingSummaries::Antigravity
+                && !candidate.labs.antigravity_summaries =>
+        {
+            return Err(invalid(name, "Turn on labs.antigravity_summaries first"));
+        }
         "meetings.summaries"
             if candidate.meetings.summaries == crate::app_settings::MeetingSummaries::OpenCode
                 && crate::policy::Policy::current()
@@ -636,6 +652,46 @@ fn parse(key: &Key, raw: &str, shortcuts: &ShortcutRules) -> Result<Value, Contr
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn antigravity_settings_require_the_lab_and_validate_model_ids() {
+        let settings = crate::app_settings::AppSettings::default();
+        assert!(super::apply(&settings, "meetings.summaries", "antigravity", &rules()).is_err());
+        let settings = super::apply(&settings, "labs.antigravity_summaries", "true", &rules())
+            .unwrap()
+            .settings;
+        let settings = super::apply(&settings, "meetings.summaries", "antigravity", &rules())
+            .unwrap()
+            .settings;
+        assert_eq!(
+            super::get(&settings, "meetings.summaries").unwrap()[0].value,
+            "antigravity"
+        );
+        let settings = super::apply(
+            &settings,
+            "meetings.antigravity_model",
+            "claude-sonnet-4-6",
+            &rules(),
+        )
+        .unwrap()
+        .settings;
+        assert_eq!(settings.meetings.antigravity_model, "claude-sonnet-4-6");
+        assert!(
+            super::apply(
+                &settings,
+                "meetings.antigravity_model",
+                "bad model id",
+                &rules()
+            )
+            .is_err()
+        );
+        let settings = super::apply(&settings, "labs.antigravity_summaries", "false", &rules())
+            .unwrap()
+            .settings;
+        assert_eq!(
+            settings.meetings.summaries,
+            crate::app_settings::MeetingSummaries::Antigravity
+        );
+    }
     use super::*;
     use crate::app_settings::ModifierSide;
 

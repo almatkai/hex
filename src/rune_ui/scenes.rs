@@ -543,6 +543,18 @@ pub(super) const SCENES: &[Scene] = &[
         ui.meetings.view = meetings::View::Settings;
         ui.pane = Pane::Meetings;
     }),
+    ("meetings-antigravity", |ui| {
+        antigravity_settings(ui, platform::Capabilities::MACOS, false)
+    }),
+    ("meetings-antigravity-signed-in", |ui| {
+        antigravity_settings(ui, platform::Capabilities::MACOS, true)
+    }),
+    ("windows-meetings-antigravity", |ui| {
+        antigravity_settings(ui, platform::Capabilities::WINDOWS, false)
+    }),
+    ("linux-meetings-antigravity", |ui| {
+        antigravity_settings(ui, platform::Capabilities::LINUX, false)
+    }),
     // Summaries' picker open: Off, On this Mac, OpenCode, each saying what
     // it does; then with Apple Intelligence off, On this Mac kept, disabled,
     // with the fix.
@@ -970,4 +982,14 @@ fn labs_with_some_on(ui: &mut Ui) {
         ui.platform.scrawl = Some(platform::ScrawlView::preview());
     }
     ui.labs_open = true;
+}
+
+fn antigravity_settings(ui: &mut Ui, caps: platform::Capabilities, signed_in: bool) {
+    *ui = mac_fixture();
+    ui.platform = platform::PlatformState::preview(caps);
+    ui.settings.labs.antigravity_summaries = true;
+    ui.settings.meetings.summaries = crate::app_settings::MeetingSummaries::Antigravity;
+    ui.meetings.view = meetings::View::Settings;
+    ui.pane = Pane::Meetings;
+    ui.antigravity = antigravity::Account::fixture(signed_in);
 }

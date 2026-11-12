@@ -9,6 +9,7 @@ use std::sync::OnceLock;
 #[cfg(not(test))]
 use std::sync::atomic::{AtomicU8, Ordering};
 
+mod antigravity;
 mod failures;
 mod french;
 mod labs;
@@ -347,6 +348,7 @@ pub(super) fn all_translations() -> impl Iterator<Item = &'static (&'static str,
     TRANSLATIONS
         .iter()
         .chain(meetings::TRANSLATIONS)
+        .chain(antigravity::TRANSLATIONS)
         .chain(labs::TRANSLATIONS)
         .chain(failures::TRANSLATIONS)
         .chain(onboarding::TRANSLATIONS)
@@ -1628,6 +1630,12 @@ mod tests {
 
     /// Every source that translates, on every OS.
     const SOURCES: &[&str] = &[
+        include_str!("../antigravity.rs"),
+        include_str!("../antigravity/auth.rs"),
+        include_str!("../control/cli/antigravity.rs"),
+        include_str!("../rune_ui/antigravity.rs"),
+        include_str!("../meeting/generator.rs"),
+        include_str!("../meeting/notes.rs"),
         include_str!("activity.rs"),
         include_str!("opencode_catalog.rs"),
         include_str!("../rune_ui.rs"),
