@@ -13,13 +13,13 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use super::artifacts::{
-    COHERE_ARTIFACT, COHERE_LANGUAGES, GIGAAM_V3_E2E_RNNT_ARTIFACT, GRANITE_SPEECH_5_ARTIFACT,
-    GRANITE_SPEECH_5_LANGUAGES, IVRIT_WHISPER_ARTIFACT, NB_WHISPER_MEDIUM_ARTIFACT,
-    NEMOTRON_3_5_ASR_ARTIFACT, NEMOTRON_3_5_LANGUAGES, NEMOTRON_3_5_LOCALES, ORUKEET_ARTIFACT,
-    PARAKEET_ULTRA_ARTIFACT, PARAKEET_UNIFIED_ENGLISH_ARTIFACT, PARAKEET_V2_ARTIFACT,
-    PARAKEET_V3_ARTIFACT, PARAKEET_V3_LANGUAGES, QWEN_ARTIFACT, QWEN_LANGUAGES, QWENCLEO_ARTIFACT,
-    SENSEVOICE_ARTIFACT, UNDERDOG_BARK_3_CLEAN_ARTIFACT, UNDERDOG_BARK_3_PRO_ARTIFACT,
-    WHISPER_ARTIFACT,
+    COHERE_ARTIFACT, COHERE_LANGUAGES, GIGAAM_MULTILINGUAL_ARTIFACT, GIGAAM_V3_E2E_RNNT_ARTIFACT,
+    GRANITE_SPEECH_5_ARTIFACT, GRANITE_SPEECH_5_LANGUAGES, IVRIT_WHISPER_ARTIFACT,
+    NB_WHISPER_MEDIUM_ARTIFACT, NEMOTRON_3_5_ASR_ARTIFACT, NEMOTRON_3_5_LANGUAGES,
+    NEMOTRON_3_5_LOCALES, ORUKEET_ARTIFACT, PARAKEET_ULTRA_ARTIFACT,
+    PARAKEET_UNIFIED_ENGLISH_ARTIFACT, PARAKEET_V2_ARTIFACT, PARAKEET_V3_ARTIFACT,
+    PARAKEET_V3_LANGUAGES, QWEN_ARTIFACT, QWEN_LANGUAGES, QWENCLEO_ARTIFACT, SENSEVOICE_ARTIFACT,
+    UNDERDOG_BARK_3_CLEAN_ARTIFACT, UNDERDOG_BARK_3_PRO_ARTIFACT, WHISPER_ARTIFACT,
 };
 pub use super::custom_models::CustomModelId;
 pub use super::languages::{LANGUAGES, language_name};
@@ -48,6 +48,7 @@ pub enum TranscriptionModelId {
     ParakeetUltra,
     Nemotron35Asr,
     GigaAmV3,
+    GigaAmMultilingual,
     NbWhisperMedium,
     GraniteSpeech5,
     AppleSpeech,
@@ -85,6 +86,7 @@ impl TranscriptionModelId {
             Self::ParakeetUltra => "parakeet_ultra",
             Self::Nemotron35Asr => "nemotron_3_5_asr",
             Self::GigaAmV3 => "gigaam_v3",
+            Self::GigaAmMultilingual => "gigaam_multilingual",
             Self::NbWhisperMedium => "nb_whisper_medium",
             Self::GraniteSpeech5 => "granite_speech_5",
             Self::AppleSpeech => "apple_speech",
@@ -124,6 +126,7 @@ impl FromStr for TranscriptionModelId {
             "parakeet_ultra" => Ok(Self::ParakeetUltra),
             "nemotron_3_5_asr" => Ok(Self::Nemotron35Asr),
             "gigaam_v3" => Ok(Self::GigaAmV3),
+            "gigaam_multilingual" => Ok(Self::GigaAmMultilingual),
             "nb_whisper_medium" => Ok(Self::NbWhisperMedium),
             "granite_speech_5" => Ok(Self::GraniteSpeech5),
             "apple_speech" => Ok(Self::AppleSpeech),
@@ -602,6 +605,18 @@ pub const MODELS: &[ModelDefinition] = &[
         supports_language_detection: false,
     },
     ModelDefinition {
+        id: TranscriptionModelId::GigaAmMultilingual,
+        name: "GigaAM Multilingual Large CTC",
+        // Hex has not measured this model's speed or error rate.
+        realtime: "",
+        word_error_rate: None,
+        streams: false,
+        runtime: ModelRuntime::Gguf(&GIGAAM_MULTILINGUAL_ARTIFACT),
+        languages: &["ru", "kk", "ky", "uz", "en"],
+        accepts_language_hint: false,
+        supports_language_detection: false,
+    },
+    ModelDefinition {
         id: TranscriptionModelId::NbWhisperMedium,
         name: "NB-Whisper Medium",
         // On apollo's Vulkan GPU it ran FLEURS Norwegian at 0.89 times
@@ -675,7 +690,7 @@ pub fn all_models() -> Vec<&'static ModelDefinition> {
 pub(crate) fn choices_for_runtime(language: &str) -> Vec<ModelChoice> {
     use Recommendation::{Fastest, MostAccurate, Recommended, Vocabulary};
     use TranscriptionModelId::{
-        CohereTranscribe, GigaAmV3, IvritWhisperLargeV3Turbo, NbWhisperMedium,
+        CohereTranscribe, GigaAmMultilingual, GigaAmV3, IvritWhisperLargeV3Turbo, NbWhisperMedium,
         ParakeetUnifiedEnglish, ParakeetV3, Qwen3Asr06B, SenseVoiceSmall, WhisperLargeV3Turbo,
     };
     let choices: &[(TranscriptionModelId, Recommendation)] = match language {
@@ -720,6 +735,8 @@ pub(crate) fn choices_for_runtime(language: &str) -> Vec<ModelChoice> {
         // FLEURS Russian test: 5.37% WER against Parakeet v3's 6.52%, and
         // Whisper turbo's 5.36% at a fifth of its speed (Hex's run).
         "ru" => &[(GigaAmV3, Recommended), (WhisperLargeV3Turbo, Vocabulary)],
+        // Multilingual CTC covers these languages without a language hint.
+        "kk" | "ky" | "uz" => &[(GigaAmMultilingual, Recommended)],
         // FLEURS Norwegian test: 6.68% WER against Whisper turbo's 8.94%, at
         // 0.89 times its speed and 60% of its download (Hex's run).
         "no" => &[
@@ -855,13 +872,28 @@ pub(crate) fn set_test_models_dir(directory: Option<PathBuf>) {
     TEST_MODELS_DIR.with(|models| *models.borrow_mut() = directory);
 }
 
-pub fn max_audio_chunk_samples(architecture: &str, max_audio_ms: i64) -> Option<usize> {
+pub fn max_audio_chunk_samples(
+    architecture: &str,
+    variant: &str,
+    max_audio_ms: i64,
+) -> Option<usize> {
     // Cohere's encoder capacity is not its recommended transcription window.
     // The pinned model's reference processor chunks long audio at 35 seconds.
-    let maximum_ms = match (architecture, max_audio_ms) {
-        ("cohere_asr", limit) if limit > 0 => limit.min(35_000),
+    // GigaAM Multilingual CTC was trained on segments up to 25 seconds.
+    let cap = match (architecture, variant) {
         ("cohere_asr", _) => 35_000,
-        (_, limit) => limit,
+        ("gigaam", "gigaam-multilingual-large-ctc") => 25_000,
+        _ => {
+            return usize::try_from(max_audio_ms)
+                .ok()
+                .filter(|ms| *ms > 0)?
+                .checked_mul(16);
+        }
+    };
+    let maximum_ms = if max_audio_ms > 0 {
+        max_audio_ms.min(cap)
+    } else {
+        cap
     };
     usize::try_from(maximum_ms)
         .ok()
@@ -1573,6 +1605,60 @@ mod tests {
     }
 
     #[test]
+    fn multilingual_gigaam_recommends_central_asian_languages_without_hints() {
+        let model = definition(TranscriptionModelId::GigaAmMultilingual);
+        assert_eq!(model.language_choices(), ["en", "ru", "kk", "ky", "uz"]);
+        for language in ["kk", "ky", "uz"] {
+            let choices = choices_for_runtime(language);
+            assert_eq!(choices[0].model.id, model.id);
+            assert_eq!(choices[0].recommendation, Recommendation::Recommended);
+            assert!(is_known_language(language));
+            assert!(
+                validate(&TranscriptionSelection {
+                    model: model.id,
+                    language: language.into()
+                })
+                .is_ok()
+            );
+        }
+        for language in model.languages {
+            assert_eq!(model.runtime_language_hint(language), None);
+        }
+        assert!(!model.supports_language(AUTO_LANGUAGE));
+        assert_eq!(model.vocabulary_use(), VocabularyUse::None);
+        assert!(model.word_error_rate.is_none());
+        assert!(benchmark(model).is_none());
+        assert!(
+            picker_models("ru")
+                .iter()
+                .any(|(other, badge)| other.id == model.id && badge.is_none())
+        );
+    }
+
+    #[test]
+    fn multilingual_gigaam_chunks_at_25_seconds_without_changing_v3() {
+        let variant = "gigaam-multilingual-large-ctc";
+        for limit in [0, -1, 400_000] {
+            assert_eq!(
+                max_audio_chunk_samples("gigaam", variant, limit),
+                Some(400_000)
+            );
+        }
+        assert_eq!(
+            max_audio_chunk_samples("gigaam", variant, 10_000),
+            Some(160_000)
+        );
+        assert_eq!(
+            max_audio_chunk_samples("gigaam", "gigaam-v3-e2e-rnnt", 0),
+            None
+        );
+        assert_eq!(
+            max_audio_chunk_samples("gigaam", "gigaam-v3-e2e-rnnt", 60_000),
+            Some(960_000)
+        );
+    }
+
+    #[test]
     fn russian_recommends_gigaam_without_a_hint() {
         use Recommendation::{Recommended, Vocabulary};
         use TranscriptionModelId::{GigaAmV3, WhisperLargeV3Turbo};
@@ -1773,6 +1859,10 @@ mod tests {
             (TranscriptionModelId::ParakeetUltra, "parakeet_ultra"),
             (TranscriptionModelId::Nemotron35Asr, "nemotron_3_5_asr"),
             (TranscriptionModelId::GigaAmV3, "gigaam_v3"),
+            (
+                TranscriptionModelId::GigaAmMultilingual,
+                "gigaam_multilingual",
+            ),
             (TranscriptionModelId::NbWhisperMedium, "nb_whisper_medium"),
             (TranscriptionModelId::AppleSpeech, "apple_speech"),
         ] {
@@ -2418,12 +2508,18 @@ mod tests {
     #[test]
     fn cohere_chunks_at_reference_window_not_encoder_capacity() {
         assert_eq!(
-            max_audio_chunk_samples("cohere_asr", 400_000),
+            max_audio_chunk_samples("cohere_asr", "", 400_000),
             Some(560_000)
         );
-        assert_eq!(max_audio_chunk_samples("cohere_asr", 0), Some(560_000));
-        assert_eq!(max_audio_chunk_samples("cohere_asr", 10_000), Some(160_000));
-        assert_eq!(max_audio_chunk_samples("whisper", 0), None);
-        assert_eq!(max_audio_chunk_samples("parakeet", 60_000), Some(960_000));
+        assert_eq!(max_audio_chunk_samples("cohere_asr", "", 0), Some(560_000));
+        assert_eq!(
+            max_audio_chunk_samples("cohere_asr", "", 10_000),
+            Some(160_000)
+        );
+        assert_eq!(max_audio_chunk_samples("whisper", "", 0), None);
+        assert_eq!(
+            max_audio_chunk_samples("parakeet", "", 60_000),
+            Some(960_000)
+        );
     }
 }
