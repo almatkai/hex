@@ -21,6 +21,15 @@ look at every changed image, and commit them with the change.
 removed. The `rune-ui` integration branch is merged and kept only for history:
 branch from and push to `dev`.
 
+## Strict Build & CI Rules (No GitHub Actions Builds)
+
+- **DO NOT RUN BUILDS IN GITHUB ACTIONS**: Never trigger builds or dispatch build workflows (`gh workflow run`, `Test builds`, `Release`, etc.) on GitHub Actions. GitHub Actions minutes and API quota are strictly limited and reserved for other projects.
+- **Local Builds Only**: All builds must be executed locally on the machine (`cargo build`, `scripts/build-app.sh`, etc.).
+- **Builds for Another Device / OS**: If a build is requested for another platform or physical device (e.g. building for a MacBook while on a Windows PC):
+  - Never trigger GitHub Actions.
+  - Inform the user that the target is a different device.
+  - Ask the user whether to attempt connecting and building via Tailscale, or provide the exact local build commands to run directly on that device.
+
 ## Purpose
 
 Build Hex as a local, observable macOS voice appliance with explicit Linux
