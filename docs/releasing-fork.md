@@ -59,16 +59,16 @@ powershell -NoProfile -File scripts/release-local.ps1 -Version 3.4.1
    - Checks that release tag `v<Version>` does not already exist.
 2. **Windows Build**:
    - Builds `hex.exe` (GUI application) and `hex-console` (installed beside it as `hex.com`).
-   - Environment: `TRANSCRIBE_CMAKE_ARGS='-DGGML_NATIVE=OFF'`, `HEX_VERSION=<Version>`, `HEX_LOCAL_BUILD` unset.
-   - Packages `dist/hex-<Version>-windows-x64.zip` containing `hex.exe`, `hex.com`, and package `SHA256SUMS`.
+   - Environment: `TRANSCRIBE_CMAKE_ARGS='-DGGML_NATIVE=OFF'`, `HEX_VERSION=<Version>`, `HEX_LOCAL_BUILD=1`. A fork build keeps its updater off: otherwise it would replace itself with the upstream (Anomaly) release.
+   - Packages `dist/<Version>/hex-<Version>-windows-x64.zip` containing `hex.exe`, `hex.com`, and package `SHA256SUMS`.
 3. **macOS Build**:
    - Generates LF/no-BOM shell script and transfers to remote macOS host over Tailscale via `scp`.
-   - Checks out the exact same commit SHA on the remote host.
-   - Builds ad-hoc unsigned release app with `HEX_RELEASE_UNSIGNED=1` and `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer`.
+   - Refuses a Mac checkout with uncommitted changes, checks out the exact same commit SHA, and switches back to the previous branch when done.
+   - Builds ad-hoc signed `Hex.app` with `HEX_RELEASE_UNSIGNED=1`, `HEX_LOCAL_BUILD=1` (updates off) and `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer`.
    - Zips `Hex.app` using `ditto -c -k --keepParent` into `hex-<Version>-macos-arm64.zip`.
    - Packages `hex-<Version>-macos-arm64.dmg` using `hdiutil` and repo styling.
-   - Copies artifacts back to local `dist/`.
+   - Copies artifacts back to local `dist/<Version>/`.
 4. **Publish**:
-   - Generates top-level `dist/SHA256SUMS` covering all Windows and macOS release artifacts.
+   - Generates `dist/<Version>/SHA256SUMS` covering this release's Windows and macOS artifacts only.
    - Generates markdown changelog from `git log` since the previous release tag.
    - Publishes GitHub Release `v<Version>` with all artifacts and changelog via `gh release create`.

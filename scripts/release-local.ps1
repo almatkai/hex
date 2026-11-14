@@ -194,13 +194,13 @@ if ($DryRun) {
     Write-Host "Previous Tag : $(if ($prevTag) { $prevTag } else { 'none' })"
     Write-Host ""
     Write-Host "1. Windows Build (Local):"
-    Write-Host "   - Unset `$env:HEX_LOCAL_BUILD"
+    Write-Host "   - Set `$env:HEX_LOCAL_BUILD = '1' (fork builds never self-update to upstream releases)"
     Write-Host "   - Set `$env:TRANSCRIBE_CMAKE_ARGS = '-DGGML_NATIVE=OFF'"
     Write-Host "   - Set `$env:HEX_VERSION = '$Version'"
     Write-Host "   - cargo build --locked --release --target x86_64-pc-windows-msvc"
     Write-Host "   - cargo build --locked --release --target x86_64-pc-windows-msvc -p hex-console"
     Write-Host "   - Package target\x86_64-pc-windows-msvc\release\hex.exe and hex-console.exe (as hex.com)"
-    Write-Host "     into dist\hex-$Version-windows-x64.zip with package SHA256SUMS"
+    Write-Host "     into dist\$Version\hex-$Version-windows-x64.zip with package SHA256SUMS"
     Write-Host ""
     Write-Host "2. macOS Build (Remote over Tailscale):"
     Write-Host "   - Host: $MacHost"
@@ -208,17 +208,17 @@ if ($DryRun) {
     Write-Host "   - Generate bash build script with LF and no BOM"
     Write-Host "   - scp script to ${MacHost}:/tmp/hex-release-$Version.sh"
     Write-Host "   - Execute via ssh:"
-    Write-Host "       git fetch origin && git checkout $commitSha"
+    Write-Host "       refuse a dirty checkout; git fetch origin && git checkout $commitSha (switched back afterwards)"
     Write-Host "       export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer"
     Write-Host "       export HEX_VERSION=$Version"
-    Write-Host "       export HEX_RELEASE_UNSIGNED=1"
+    Write-Host "       export HEX_RELEASE_UNSIGNED=1 HEX_LOCAL_BUILD=1"
     Write-Host "       ./scripts/build-app.sh"
     Write-Host "       /usr/bin/ditto -c -k --keepParent target/app/Hex.app dist/hex-$Version-macos-arm64.zip"
     Write-Host "       Package DMG if scripts/package-dmg.sh or hdiutil available"
-    Write-Host "   - scp dist\hex-$Version-macos-arm64.zip (and DMG if created) back to dist\"
+    Write-Host "   - scp dist/hex-$Version-macos-arm64.zip (and DMG if created) back to dist\$Version\"
     Write-Host ""
     Write-Host "3. Publish to GitHub Release:"
-    Write-Host "   - Compute dist\SHA256SUMS for all release artifacts"
+    Write-Host "   - Compute dist\$Version\SHA256SUMS for this release's artifacts only"
     Write-Host "   - Create release with gh CLI:"
     Write-Host "       gh release create $tagName --repo $Repo --target $commitSha --title `"Hex $Version`" --notes-file <notes> <artifacts...>"
     Write-Host ""
@@ -243,9 +243,9 @@ if ($DryRun) {
 Write-Host ""
 Write-Host "==> [1/3] Building Windows x64 release..." -ForegroundColor Cyan
 
-if (Test-Path env:HEX_LOCAL_BUILD) {
-    Remove-Item env:HEX_LOCAL_BUILD
-}
+# A fork build must never replace itself with an upstream (Anomaly) release:
+# HEX_LOCAL_BUILD=1 turns the updater off ("Local build · updates off").
+$env:HEX_LOCAL_BUILD = '1'
 $env:TRANSCRIBE_CMAKE_ARGS = '-DGGML_NATIVE=OFF'
 $env:HEX_VERSION = $Version
 
@@ -274,10 +274,12 @@ if (-not (Test-Path $hexConsoleExe)) {
     throw "Missing built hex-console.exe at $hexConsoleExe"
 }
 
-$distDir = Join-Path $RepoRoot 'dist'
-if (-not (Test-Path $distDir)) {
-    New-Item -ItemType Directory -Path $distDir -Force | Out-Null
+# One folder per release, so a publish never uploads an older release's files.
+$distDir = Join-Path (Join-Path $RepoRoot 'dist') $Version
+if (Test-Path $distDir) {
+    Remove-Item $distDir -Recurse -Force
 }
+New-Item -ItemType Directory -Path $distDir -Force | Out-Null
 
 $winStaging = Join-Path ([System.IO.Path]::GetTempPath()) ("hex-win-stage-" + [System.Guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $winStaging -Force | Out-Null
@@ -321,11 +323,19 @@ $bashLines = @(
     '    echo "Error: secrets/antigravity-client-secret.txt is missing or empty" >&2',
     '    exit 1',
     'fi',
+    'if [ -n "$(git status --porcelain --untracked-files=no)" ]; then',
+    '    echo "Error: the Mac checkout has uncommitted changes" >&2',
+    '    exit 1',
+    'fi',
+    'previous=$(git symbolic-ref --short -q HEAD || git rev-parse HEAD)',
+    'trap ''git checkout -q "$previous" || true'' EXIT',
     'git fetch origin',
-    "git checkout `"$commitSha`"",
+    "git checkout -q `"$commitSha`"",
     'export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer',
     "export HEX_VERSION=`"$Version`"",
     'export HEX_RELEASE_UNSIGNED=1',
+    '# A fork build must never replace itself with an upstream release.',
+    'export HEX_LOCAL_BUILD=1',
     './scripts/build-app.sh',
     'mkdir -p dist',
     "zip_file=`"dist/hex-${Version}-macos-arm64.zip`"",
