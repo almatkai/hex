@@ -2817,7 +2817,10 @@ fn a_new_install_opens_the_first_run() {
 #[test]
 fn onboarding_downloads_the_model_through_the_service() {
     let mut rt = runtime("onboarding", true, PANE_SIZE);
-    // The download starts as soon as onboarding opens.
+    assert!(sent(&rt).is_empty());
+    assert!(texts(&rt).contains(&"Choose a speech model".to_owned()));
+    tap(&mut rt, "continue");
+    // Only confirming the preselected recommendation starts its download.
     assert!(matches!(
         sent(&rt),
         [Request::ChooseModel {
@@ -2825,7 +2828,6 @@ fn onboarding_downloads_the_model_through_the_service() {
             ..
         }]
     ));
-    assert!(texts(&rt).contains(&"Setting up Hex".to_owned()));
     // The service finishes: the model is installed and the practice opens.
     rt.state.picker.installed = Some(vec![TranscriptionModelId::ParakeetUnifiedEnglish]);
     settle(&mut rt);
@@ -2844,7 +2846,7 @@ fn onboarding_downloads_the_model_through_the_service() {
 fn a_found_model_moves_on_without_a_download_and_back_returns_to_it() {
     let mut rt = runtime("onboarding-model-found", false, PANE_SIZE);
     assert!(rt.find("model-list").is_some());
-    tap(&mut rt, "model1");
+    tap(&mut rt, "model4");
     // The service saves the pick and has the found file ready: the list
     // stays, with no "Setting up Hex" download page.
     rt.state.settings.transcription = TranscriptionSelection {
@@ -2876,7 +2878,7 @@ fn a_found_model_moves_on_without_a_download_and_back_returns_to_it() {
 
 #[test]
 fn a_failed_download_names_its_cause_and_offers_a_model_file() {
-    let mut rt = runtime("onboarding", false, PANE_SIZE);
+    let mut rt = runtime("onboarding-download-failed", false, PANE_SIZE);
     if let Some(view) = &mut rt.state.view {
         view.transcription.preparing = None;
         view.transcription.error = Some(
@@ -2899,30 +2901,19 @@ fn a_failed_download_names_its_cause_and_offers_a_model_file() {
 }
 
 #[test]
-fn with_no_model_found_onboarding_downloads_the_recommended_model_with_no_list() {
+fn with_no_model_found_onboarding_waits_at_the_model_list() {
     for scene in ["onboarding", "mac-onboarding"] {
         let rt = runtime(scene, false, PANE_SIZE);
         assert!(rt.state.found.models.is_empty());
-        // The download starts on its own, before any step or pick.
-        assert!(
-            matches!(
-                sent(&rt),
-                [Request::ChooseModel {
-                    model: TranscriptionModelId::ParakeetUnifiedEnglish,
-                    ..
-                }]
-            ),
-            "{scene}: {:?}",
-            sent(&rt)
-        );
+        assert!(sent(&rt).is_empty(), "{scene}: no automatic download");
         let shown = texts(&rt);
-        assert!(rt.find("model-list").is_none(), "{scene}: no model list");
+        assert!(rt.find("model-list").is_some(), "{scene}: model list");
         assert!(
-            shown.contains(&"Setting up Hex".to_owned()),
+            !shown.contains(&"Setting up Hex".to_owned()),
             "{scene}: {shown:?}"
         );
         assert!(
-            !shown.contains(&"Choose a speech model".to_owned()),
+            shown.contains(&"Choose a speech model".to_owned()),
             "{scene}: {shown:?}"
         );
     }
@@ -2943,7 +2934,7 @@ fn the_onboarding_model_list_starts_the_row_picked_or_the_recommended_one() {
     ));
     // Picking a found catalog model uses it, with no download of ours.
     let mut rt = runtime("onboarding-model-found", false, PANE_SIZE);
-    tap(&mut rt, "model1");
+    tap(&mut rt, "model4");
     assert!(matches!(
         sent(&rt),
         [Request::ChooseModel {
@@ -2951,7 +2942,7 @@ fn the_onboarding_model_list_starts_the_row_picked_or_the_recommended_one() {
             ..
         }]
     ));
-    assert_eq!(rt.state.found.picked, Some(1));
+    assert_eq!(rt.state.found.picked, Some(4));
 }
 
 /// The microphone field's value. An open menu is modal, so the field behind

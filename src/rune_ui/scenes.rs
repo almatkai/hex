@@ -279,8 +279,8 @@ pub(super) const SCENES: &[Scene] = &[
             },
         );
     }),
-    // The first run on Linux (Windows is the same window): setting up Hex
-    // with nothing found, the model step with models found here, the demo,
+    // The first run on Linux (Windows is the same window): the model choice
+    // with nothing found and with models found here, the demo,
     // waiting for the model, the practice game, and Hex is ready.
     ("onboarding", |ui| {
         first_run(ui, FirstRun::Fresh, Page::Download)

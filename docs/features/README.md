@@ -90,7 +90,7 @@ Install on Windows                        // setup.windows-installer
 ├── Setup.exe, per user, no admin -> managed versions\<version>\hex.exe
 │   ├── x64 without a Vulkan 1.2 driver -> installs; speech on the CPU + Settings note (#1240)
 │   ├── another version installed (e.g. self-updated) -> install this one over it
-│   └── finish -> Open Hex -> the first run downloads a model
+│   └── finish -> Open Hex -> choose a speech model before it downloads
 └── Settings › Apps -> uninstall every version, shortcut, Launch at login; keep data
 
 Install on Linux                          // setup.linux-installer
@@ -190,7 +190,7 @@ Launch Hex, setup incomplete              // setup.tour; every build and OS, ful
 │   └── Setup ready, listener starting -> a running 2.3.1 or Swift Hex   // setup.quit-legacy
 │       (retired bundle IDs) is asked to quit, so both never answer Option;
 │       it stays installed. No check; `macos_rune::quit_legacy_hex`
-├── Setting up Hex -> speech model download starts at once  // setup.background-download
+├── Choose a speech model -> no download before a pick or Continue  // setup.background-download
 │   ├── Model -> the selection recommended for the system's first preferred
 │   │            language (English -> Parakeet Unified English; e.g. French ->
 │   │            Parakeet v3, Japanese -> Whisper large-v3-turbo); when that
@@ -199,14 +199,16 @@ Launch Hex, setup incomplete              // setup.tour; every build and OS, ful
 │   │            dropdown chevron; with English as the system language there is
 │   │            nothing to switch to, so the capsule just shows English,
 │   │            whatever English model is selected
-│   ├── The download is held while the Hugging Face scan runs (headers only)
-│   ├── Models found here -> the model step instead      // setup.found-choice
+│   ├── The download stays held until a pick or Continue; the Hugging Face
+│   │   scan reads headers only and an empty result never starts a download
+│   ├── Always show the model step                      // setup.found-choice
 │   │   ├── "Choose a speech model": one list, ours first and selected, then the
-│   │   │   found files; a pick starts at once (ours downloads, a found one is
+│   │   │   curated catalog choices with sizes and languages (GigaAM Multilingual,
+│   │   │   GigaAM v3, Whisper Large v3 Turbo, Parakeet), then found files;
+│   │   │   a pick starts at once (a catalog model downloads, a found one is
 │   │   │   checked and used in place); Continue starts the selected row
 │   │   ├── A found pick moves on with no download page or pill
 │   │   └── Back on the pages after it returns to the list to change the pick
-│   ├── Nothing found -> this page as always, the recommended model downloading
 │   ├── Progress moves to the top pill once the story moves on; failure ->
 │   │   why, in one line (a proxy or certificate, #894), + Use a model
 │   │   file… + Try again
@@ -218,7 +220,7 @@ Launch Hex, setup incomplete              // setup.tour; every build and OS, ful
 │   │       error), + Download + Add model file…. Check: golden
 │   │       `onboarding-no-model`, `onboarding_continue_without_model`
 │   └── Change or delete the model later in Settings      // setup.delete-model
-├── The demo, while the model downloads: a second on Setting up Hex, then the
+├── The demo, after confirming the model: then the
 │   Launch Room's conversation is there, Jay's messages landing in it ->
 │   "Without Hex" (typed, with typos) -> "With Hex" (the same reply, spoken,
 │   fireworks lighting the page), then moves on by itself; Skip → (or
@@ -495,7 +497,8 @@ prove rendering, not clean-account permission grants or model preparation.
 
 The model step's list and its rules are in
 [own-models.md](own-models.md#onboarding-choice) (scenes
-`onboarding-model-found`, `-downloading`, `-recommended`, `-back`).
+`onboarding`, `mac-onboarding`, `onboarding-model-found`, `-downloading`,
+`-recommended`, `-back`).
 
 The tour state is the pure `desktop::onboarding::Flow` (steps, row states,
 background download, practice outcomes, one-relaunch guard), fed by
@@ -510,7 +513,11 @@ finishes once it is on (`a_switched_off_windows_microphone_adds_its_row_until_se
 `windows_onboarding_asks_only_for_the_microphone_switch`; the registry read is
 cross-compiled only, not run on a Windows PC).
 Unit tests (`desktop::onboarding::tests`) cover step order, the download starting on the
-welcome screen and retrying from any step, the auto-advance beat, live row
+welcome screen when not held and retrying from any step. The window always
+holds that automatic download; `rune_ui::onboarding::tests` checks the choice
+with an empty scan, recommendations for different languages, Continue,
+picked-model progress before the host saves it, and deduplicated found files.
+The pure flow also covers the auto-advance beat, live row
 flips, a refused microphone, practice outcomes, resume, the relaunch guard and
 resume marker, resuming past a setup the relaunch finished
 (`resuming_at_setup_after_a_relaunch_passes_grants_that_are_now_real`),

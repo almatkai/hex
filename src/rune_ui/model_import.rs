@@ -232,7 +232,17 @@ pub(super) fn poll(ui: &mut Ui) -> bool {
                     let language = crate::transcription::models::definition(model)
                         .language_for(&ui.settings.transcription.language)
                         .to_owned();
-                    ui.send(super::Request::ChooseModel { model, language });
+                    if use_it && ui.first_run.is_some() {
+                        super::found_choice::prepare(
+                            ui,
+                            crate::transcription::models::TranscriptionSelection {
+                                model,
+                                language,
+                            },
+                        );
+                    } else {
+                        ui.send(super::Request::ChooseModel { model, language });
+                    }
                 }
             }
             Err(error) => ui.picker.import.error = Some(error),

@@ -884,16 +884,17 @@ CoreAudio formats, AppleScript details, or event serialization.
   permission is ready and the download failed or stalled (30 s without
   bytes); it records completion, and Settings › General then says no model
   is installed, with Download and Add model file….
-- Onboarding shows its model step only when the scan found a compatible
-  model; otherwise Setting up Hex is unchanged and the recommended model
-  downloads by itself. The step is one card of radio rows with no buttons or
-  file details: Hex's recommended model first and selected (its exact copy on
-  this computer is that same row), then the found files. Picking a row starts
+- Onboarding always shows its model step, even when the scan finds nothing.
+  The step is one card of radio rows with no buttons or file details: Hex's
+  recommended model for the person's language first and selected, then a short
+  catalog list (GigaAM Multilingual, GigaAM v3, Whisper Large v3 Turbo, and
+  Parakeet), with names, sizes and languages, then the found files. An exact
+  catalog copy on this computer shares its catalog row. Picking a row starts
   it, and Continue starts the selected row and moves on once the pick is
   under way; a found pick shows no download page or pill. The tour's own
-  download is held while the scan runs and until a pick, and only through
-  setup. Back on the pages after the step returns to it. A found model is
-  never picked for the person.
+  download is held until a pick or Continue, including after setup; an empty
+  scan never starts it. Back on the pages after the step returns to it. A found
+  model is never picked for the person.
 - The menu-bar model picker lists only downloaded, available models and remembers
   each model's last selected language. It works without a
   Settings window. Settings and the menu bar share one preparation owner; a newer

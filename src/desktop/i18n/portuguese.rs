@@ -21,6 +21,10 @@ pub(super) fn table() -> &'static HashMap<&'static str, &'static str> {
 
 #[rustfmt::skip]
 const TRANSLATIONS: &[(&str, &str)] = &[
+    ("Pick a model to download, or use one already on this computer.", "Escolha um modelo para baixar ou use um que já está neste computador."),
+    ("25 European languages", "25 idiomas europeus"),
+    ("Russian, with punctuation", "Russo, com pontuação"),
+    ("Multilingual", "Multilíngue"),
 
     ("Hex picks a fast model", "O Hex escolhe um modelo rápido"),
     ("Follow live transcript", "Acompanhar a transcrição ao vivo"),

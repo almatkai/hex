@@ -7,13 +7,9 @@
 //! dictation, and records completion. This module shows the story's pages
 //! over the window and feeds them that real state each frame.
 //!
-//! When the Hugging Face cache holds a compatible model, the download page
-//! becomes the model step (`found_choice`): one list, Hex's recommended
-//! model first and selected, then the models found. Picking ours downloads
-//! it; picking a found one uses it in place, and the story moves on without
-//! a download. Back on the next pages returns to the list. Nothing found
-//! leaves the download page as it is, with the recommended model
-//! downloading by itself.
+//! Every first run offers the model step (`found_choice`): the language's
+//! recommendation, curated catalog choices, then found files. Only a pick
+//! or Continue starts preparation. Back returns to the list.
 
 use crate::desktop::i18n::tr;
 use std::sync::Mutex;
@@ -102,10 +98,10 @@ pub(crate) struct Live {
     _live_words: crate::dictation::live_text::Demand,
 }
 
-/// The model step, shown only when the scan found a compatible model.
+/// The model step, always shown before the first run starts preparation.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) enum ModelStep {
-    /// Nothing found (or not looked yet): the download page as always.
+    /// Download recovery without the list.
     #[default]
     None,
     /// The list shows and holds the story until Continue.
@@ -336,7 +332,7 @@ pub(in crate::rune_ui) fn open(ui: &mut Ui) {
         relaunch_failed: false,
         paste: ui.platform.paste,
         models: Vec::new(),
-        model_step: ModelStep::None,
+        model_step: ModelStep::Choosing,
         pick_started: false,
         scanning: false,
         practice: Practice::Waiting,
@@ -368,7 +364,7 @@ pub(in crate::rune_ui) fn open(ui: &mut Ui) {
 /// A page of the first run, for scenes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(in crate::rune_ui) enum Page {
-    /// `"Setting up Hex"`, or the model step when models were found.
+    /// The model choice, or download recovery after a failed pick.
     Download,
     /// The demo, finished: `"With Hex"`'s happy ending.
     Demo,
@@ -411,6 +407,12 @@ pub(in crate::rune_ui) fn fixture(ui: &mut Ui, page: Page) {
 
 /// Scenes: plays a fixture's first run on from where it is to `page`.
 pub(in crate::rune_ui) fn fixture_resume(ui: &mut Ui, page: Page) {
+    // Pages after the model choice represent an explicit Continue.
+    if page != Page::Download
+        && let Some(live) = ui.first_run.as_mut().and_then(|s| s.live.as_mut())
+    {
+        live.model_step = ModelStep::Chosen;
+    }
     // One poll fills in what the tour reports.
     let mut tx = Tx::default();
     poll(ui, &mut tx);
@@ -460,6 +462,9 @@ pub(crate) fn restart(ui: &mut Ui, tx: &mut Tx) -> Result<(), String> {
     }
     ui.select_pane(super::super::Pane::General, tx);
     ui.first_run = None;
+    ui.found.picked = None;
+    ui.found.choice = None;
+    ui.found.recommended = None;
     ui.tour = Some(onboarding::Tour::replay(&ui.settings, &ui.platform));
     open(ui);
     tx.settle();
@@ -477,17 +482,12 @@ pub(in crate::rune_ui) fn poll(ui: &mut Ui, tx: &mut Tx) -> bool {
     let now = clock(ui);
     let view = ui.tour.as_ref().map(|tour| tour.flow.view());
     let tour_model = view.as_ref().map_or(ItemStatus::Todo, |view| view.model);
-    let offered = found_choice::offered(ui, tour_model);
-    let models = if offered {
-        found_choice::rows(ui, tour_model)
-    } else {
-        Vec::new()
-    };
+    let models = found_choice::rows(ui, tour_model);
     let started = found_choice::started(ui, tour_model);
     let scanning = ui.found.scanning();
     let caps = ui.settings.dictation_hotkey.keycaps();
     let toggle = ui.settings.shortcut_mode == crate::dictation::ShortcutMode::Toggle;
-    let Some(choice) = ui
+    let Some(previous_choice) = ui
         .first_run
         .as_ref()
         .and_then(|s| s.live.as_ref())
@@ -495,6 +495,40 @@ pub(in crate::rune_ui) fn poll(ui: &mut Ui, tx: &mut Tx) -> bool {
     else {
         return false;
     };
+    let choice = ui
+        .found
+        .choice
+        .clone()
+        .unwrap_or_else(|| previous_choice.clone());
+    if choice != previous_choice {
+        let alternate = alternate_selection(&choice, &ui.preferred_language());
+        let other = if english_language(&choice) {
+            alternate.as_ref()
+        } else {
+            Some(&choice)
+        };
+        set_other_label(
+            other.map(|selection| transcription_models::language_name(&selection.language)),
+        );
+        if let Some(s) = ui.first_run.as_mut() {
+            s.wants = if english_language(&choice) {
+                Language::English
+            } else {
+                Language::Other
+            };
+            s.language = Some(s.wants);
+            if let Some(download) = s.download.as_mut() {
+                download.language = s.wants;
+                download.downloaded = 0;
+            }
+            if let Some(live) = s.live.as_mut() {
+                live.choice = choice.clone();
+                live.alternate = alternate;
+                live.checked = None;
+                live.progress = None;
+            }
+        }
+    }
     let model = transcription_models::validate(&choice).ok();
     let warming = ui.view.as_ref().is_some_and(|view| view.listener.warming);
     let (preparing, downloaded_bytes, errored) =
@@ -593,20 +627,15 @@ pub(in crate::rune_ui) fn poll(ui: &mut Ui, tx: &mut Tx) -> bool {
         live.mic_granted_at = None;
     }
 
-    // The model step: shown on the download page once the scan found
-    // something, and held there until Continue.
+    // The model step holds the story until Continue, with or without files.
     live.models = models;
     live.pick_started = started;
     live.scanning = scanning;
     let downloading_page = matches!(s.step, Step::Pick | Step::Started);
-    match live.model_step {
-        ModelStep::None if offered && downloading_page => live.model_step = ModelStep::Choosing,
-        ModelStep::Choosing if !offered => live.model_step = ModelStep::None,
-        // A pick that failed asks again.
-        ModelStep::Chosen if downloading_page && tour_model == ItemStatus::Failed => {
-            live.model_step = ModelStep::Choosing;
-        }
-        _ => {}
+    // A failed pick asks again on the list, with download recovery actions.
+    if live.model_step == ModelStep::Chosen && downloading_page && tour_model == ItemStatus::Failed
+    {
+        live.model_step = ModelStep::Choosing;
     }
     if live.model_step == ModelStep::Chosen && downloading_page {
         // A model already on this computer needs no download pill.
@@ -736,6 +765,7 @@ pub(super) fn finish(ui: &mut Ui) {
 
 fn choose(ui: &mut Ui, selection: &TranscriptionSelection) {
     if transcription_models::validate(selection).is_ok() {
+        ui.found.choice = Some(selection.clone());
         ui.send(Request::ChooseModel {
             model: selection.model,
             language: selection.language.clone(),
@@ -771,11 +801,7 @@ pub(super) fn pick_model(index: usize) -> impl Fn(&mut Ui) + 'static {
 /// Continue on the model step: starts the selected row if none was picked,
 /// and the story moves on once the pick is under way.
 pub(in crate::rune_ui) fn continue_model(ui: &mut Ui) {
-    let model = ui
-        .tour
-        .as_ref()
-        .map_or(ItemStatus::Todo, |tour| tour.flow.view().model);
-    if found_choice::pending(ui, model) {
+    if found_choice::pending(ui) {
         found_choice::start_selected(ui);
     }
     if let Some(live) = ui.first_run.as_mut().and_then(|s| s.live.as_mut()) {
@@ -905,6 +931,24 @@ mod tests {
             model,
             language: language.into(),
         }
+    }
+
+    #[test]
+    fn onboarding_download_label_follows_the_picked_language() {
+        let mut ui = crate::rune_ui::portal_fixture();
+        onboarding::fixture(&mut ui, TourStep::Setup, false);
+        fixture(&mut ui, Page::Download);
+        let index = found_choice::rows(&ui, ItemStatus::Todo)
+            .iter()
+            .position(|row| {
+                row.name == transcription_models::definition(TranscriptionModelId::GigaAmV3).name
+            })
+            .unwrap();
+        found_choice::pick(&mut ui, index);
+        poll(&mut ui, &mut Tx::default());
+        let s = ui.first_run.as_ref().unwrap();
+        assert_eq!(s.download.unwrap().language, Language::Other);
+        assert_eq!(s.live.as_ref().unwrap().choice.language, "ru");
     }
 
     #[test]

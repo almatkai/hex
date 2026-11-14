@@ -9,7 +9,7 @@
 //! - Calm permission grants and the escaping Accessibility panel (`permissions`).
 //! - Auditionable typing key-sound candidates and `#292` `feedback` tones (`sfx`).
 
-use rune::{Anim, El, TextStyle, Transition, col, el, row, text};
+use rune::{Anim, El, ScrollSpec, TextStyle, Transition, col, el, row, text};
 use rune_kit::{Badge, Button, ButtonVariant, RadioItem, TextArea, glyphs};
 
 use super::super::controls::{DESCRIPTION, KeySize, METRICS, Paint, PushSize, keycap};
@@ -211,12 +211,10 @@ fn back(p: Paint, s: &Onboard) -> Option<El> {
     })
 }
 
-/// The model step: the models found on this computer, Hex's recommended
-/// one first and selected. A pick starts at once; Continue moves on once it
-/// is under way.
+/// The model step: the recommendation, catalog choices, and found files.
 fn models_page(p: Paint, s: &Onboard, live: &Live) -> El {
     let k = p.k;
-    let mut list = permissions::card(p).key("model-list").py(4.0);
+    let mut list = permissions::card(p).key("model-list").w_full().py(4.0);
     for (index, model) in live.models.iter().enumerate() {
         if index > 0 {
             list = list.child(permissions::separator(p, &format!("sep{index}")));
@@ -224,6 +222,15 @@ fn models_page(p: Paint, s: &Onboard, live: &Live) -> El {
         list = list.child(model_row(p, index, model));
     }
     let list = k.elevate(list, &k.elevation.raised);
+    let list = col()
+        .key("model-viewport")
+        .w(700.0)
+        .max_h(if live.model_blocked() { 220.0 } else { 420.0 })
+        .shrink()
+        .scroll(ScrollSpec {
+            stick_bottom: false,
+        })
+        .child(list);
     col()
         .key("models")
         .gap(22.0)
@@ -233,10 +240,15 @@ fn models_page(p: Paint, s: &Onboard, live: &Live) -> El {
             s,
             "models-head",
             tr("Choose a speech model"),
-            lead(p, tr("Hex found speech models already on this computer.")),
+            lead(
+                p,
+                tr("Pick a model to download, or use one already on this computer."),
+            ),
         ))
         .child(s.motion.staggered(list, 1.0, 8.0))
         .child(action(continue_model_button(p)))
+        .children(download_retry(p, s))
+        .children(without_model(p, s))
 }
 
 fn model_row(p: Paint, index: usize, model: &ChoiceRow) -> El {
@@ -507,9 +519,32 @@ fn download_page(p: Paint, s: &Onboard, waiting: bool) -> El {
         s.motion.staggered(progress_capsule, 2.0, 6.0)
     };
 
-    // A network that blocks the download: why, then retry or use a model
-    // file brought some other way (#894).
-    let retry = s.live.as_ref().filter(|live| live.failed).map(|live| {
+    col()
+        .key(if waiting { "waiting" } else { "download" })
+        .gap(22.0)
+        .items_center()
+        // On "Almost ready" the download flies down past both into its bar.
+        .child(after_flight(
+            flow_box(
+                if waiting {
+                    "waiting-hud"
+                } else {
+                    "download-hud"
+                },
+                1.24,
+                s,
+            ),
+            s,
+        ))
+        .child(after_flight(head, s))
+        .child(progress_capsule)
+        .children(download_retry(p, s))
+        .children(without_model(p, s))
+}
+
+/// A failed model pick keeps retry, file import, and no-model recovery.
+fn download_retry(p: Paint, s: &Onboard) -> Option<El> {
+    s.live.as_ref().filter(|live| live.failed).map(|live| {
         let why = live
             .failure
             .clone()
@@ -552,28 +587,7 @@ fn download_page(p: Paint, s: &Onboard, waiting: bool) -> El {
                             .key("retry-download"),
                     ),
             )
-    });
-    col()
-        .key(if waiting { "waiting" } else { "download" })
-        .gap(22.0)
-        .items_center()
-        // On "Almost ready" the download flies down past both into its bar.
-        .child(after_flight(
-            flow_box(
-                if waiting {
-                    "waiting-hud"
-                } else {
-                    "download-hud"
-                },
-                1.24,
-                s,
-            ),
-            s,
-        ))
-        .child(after_flight(head, s))
-        .child(progress_capsule)
-        .children(retry)
-        .children(without_model(p, s))
+    })
 }
 
 /// A sketch from `"Watch another one"`, the download up in the top pill.

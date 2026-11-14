@@ -4,6 +4,10 @@
 /// Columns: Polish, Chinese (Simplified), Japanese, German, Spanish, Ukrainian.
 #[rustfmt::skip]
 pub(super) const TRANSLATIONS: &[(&str, [&str; 6])] = &[
+    ("Pick a model to download, or use one already on this computer.", ["Wybierz model do pobrania lub użyj modelu już na tym komputerze.", "选择要下载的模型，或使用这台电脑上已有的模型。", "ダウンロードするモデルを選ぶか、このコンピューターにあるモデルを使います。", "Wähle ein Modell zum Herunterladen oder nutze eines auf diesem Computer.", "Elige un modelo para descargar o usa uno que ya esté en este ordenador.", "Виберіть модель для завантаження або скористайтеся наявною на цьому комп'ютері."]),
+    ("25 European languages", ["25 języków europejskich", "25 种欧洲语言", "ヨーロッパの25言語", "25 europäische Sprachen", "25 idiomas europeos", "25 європейських мов"]),
+    ("Russian, with punctuation", ["Rosyjski, z interpunkcją", "俄语，带标点", "ロシア語、句読点付き", "Russisch, mit Satzzeichen", "Ruso, con puntuación", "Російська, з розділовими знаками"]),
+    ("Multilingual", ["Wielojęzyczny", "多语言", "多言語", "Mehrsprachig", "Multilingüe", "Багатомовна"]),
     ("Hex starts listening once the speech model has downloaded.", ["Hex zacznie słuchać, gdy model mowy się pobierze.", "语音模型下载完成后，Hex 就会开始聆听。", "音声モデルのダウンロードが終わると、Hex が聞き取りを始めます。", "Hex hört zu, sobald das Sprachmodell geladen ist.", "Hex empezará a escuchar cuando termine de descargarse el modelo de voz.", "Hex почне слухати після завантаження моделі розпізнавання мовлення."]),
     ("Device Control and Data Access", ["Sterowanie urządzeniem i dostęp do danych", "设备控制与数据访问", "デバイス制御とデータアクセス", "Gerätesteuerung und Datenzugriff", "Control del dispositivo y acceso a datos", "Керування пристроями й доступ до даних"]),
     ("Allowed", ["Dozwolone", "已允许", "許可済み", "Erlaubt", "Permitido", "Дозволено"]),
