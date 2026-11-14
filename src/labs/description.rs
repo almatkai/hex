@@ -196,6 +196,9 @@ impl Feature {
             Self::TranscribeFiles => {
                 "Turn a WAV recording into text with hex transcribe <file> and your dictation model"
             }
+            Self::RemoteDictation => {
+                "Dictate from a paired phone over Tailscale with this computer's speech model"
+            }
             Self::ApiProcessing => {
                 "Let apps using Hex's local API ask for transcripts with your Global mode's corrections, rewrite, and transformations applied"
             }

@@ -77,6 +77,7 @@ pub(super) enum Pane {
     /// The Hex Microphone's driver, tuning, and try-it demo (macOS, while
     /// its Labs toggle is on).
     VoiceFilter,
+    Remote,
     /// The dictation indicator's tuning scene (Playground only).
     HudLab,
     /// Legacy event-log inspector scene (Playground only).
@@ -96,6 +97,7 @@ impl Pane {
         #[cfg(hex_capture)]
         Pane::Annotate,
         Pane::VoiceFilter,
+        Pane::Remote,
         Pane::HudLab,
         Pane::Activity,
     ];
@@ -103,6 +105,7 @@ impl Pane {
     pub(super) fn shown(self, ui: &Ui) -> bool {
         let caps = ui.platform.caps;
         match self {
+            Pane::Remote => crate::labs::Feature::RemoteDictation.on(&ui.settings),
             Pane::Modes | Pane::HudLab | Pane::Activity => false,
             Pane::Meetings => caps.meetings && meetings::available(ui),
             // On from Labs (dev builds), or while its driver is installed.
@@ -118,6 +121,7 @@ impl Pane {
 
     pub(super) fn title(self) -> &'static str {
         match self {
+            Pane::Remote => tr("Remote dictation"),
             Pane::General => tr("General"),
             Pane::Output => tr("Output"),
             Pane::Modes => tr("Modes"),
@@ -135,6 +139,7 @@ impl Pane {
 
     pub(super) fn key(self) -> &'static str {
         match self {
+            Pane::Remote => "nav-remote",
             Pane::General => "nav-general",
             Pane::Output => "nav-output",
             Pane::Modes => "nav-modes",
@@ -152,6 +157,7 @@ impl Pane {
 
     pub(super) fn icon(self) -> &'static Icon {
         match self {
+            Pane::Remote => &VOICE_FILTER_ICON,
             Pane::General => &SETTINGS_ICON,
             Pane::Output => &OUTPUT_ICON,
             Pane::Modes => &MODES_ICON,

@@ -3225,6 +3225,9 @@ fn goldens() {
     for dark in [true, false] {
         check_golden("portal", dark, GOLDEN_SIZE);
         for scene in [
+            "remote-dictation",
+            "remote-dictation-pairing",
+            "remote-dictation-unavailable",
             "history",
             "captures",
             "mac-labs",

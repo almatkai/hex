@@ -16,6 +16,7 @@ mod labs;
 mod meetings;
 mod onboarding;
 mod portuguese;
+mod remote;
 mod russian;
 mod text_language;
 mod traditional_chinese;
@@ -349,6 +350,7 @@ pub(super) fn all_translations() -> impl Iterator<Item = &'static (&'static str,
         .iter()
         .chain(meetings::TRANSLATIONS)
         .chain(antigravity::TRANSLATIONS)
+        .chain(remote::TRANSLATIONS)
         .chain(labs::TRANSLATIONS)
         .chain(failures::TRANSLATIONS)
         .chain(onboarding::TRANSLATIONS)
@@ -1717,6 +1719,7 @@ mod tests {
         #[cfg(hex_capture)]
         include_str!("../rune_ui/capture_capsule/view.rs"),
         include_str!("../rune_ui/settings.rs"),
+        include_str!("../rune_ui/remote.rs"),
         include_str!("../rune_ui/shortcut_mode.rs"),
         include_str!("../rune_ui/sound_sets.rs"),
         include_str!("../rune_ui/speech_model.rs"),

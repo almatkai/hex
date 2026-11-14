@@ -78,6 +78,10 @@ pub enum Pane {
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(tag = "command", rename_all = "kebab-case")]
 pub enum ControlCommand {
+    Remote {
+        #[serde(flatten)]
+        action: crate::local_api::remote::Command,
+    },
     Status,
     Quit {
         #[serde(default)]

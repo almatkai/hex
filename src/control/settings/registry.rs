@@ -86,6 +86,24 @@ pub(super) const NUMERIC_CHOICES: [&str; 2] =
 
 pub(super) const KEYS: &[Key] = &[
     key(
+        "remote_dictation.enabled",
+        Kind::Bool,
+        "Labs: remote dictation over Tailscale",
+    ),
+    key(
+        "remote_dictation.port",
+        Kind::Integer {
+            min: 1024,
+            max: 65535,
+        },
+        "Remote listener TCP port (default 47821)",
+    ),
+    key(
+        "remote_dictation.process_transcripts",
+        Kind::Bool,
+        "Allow process=global on phone transcripts",
+    ),
+    key(
         "keyboard_model_switching.enabled",
         Kind::Bool,
         "Labs: switch the model when the keyboard input source changes (macOS, Windows, X11)",

@@ -83,6 +83,9 @@ pub(super) fn transcribe_audio(
     loop {
         match job.wait_timeout(TRANSCRIPTION_POLL_INTERVAL) {
             Ok(Some(Ok(transcript))) => {
+                if shutdown.load(Ordering::Acquire) {
+                    return None;
+                }
                 let mut response = serde_json::json!({
                     "transcript": &transcript.text,
                     "durationMs": duration_ms,

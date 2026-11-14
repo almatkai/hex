@@ -24,6 +24,8 @@ Hex                                      // macOS release
 └── Maintain the app                     // menu bar, login, updates, quit
 ```
 
+[Remote dictation](remote-dictation.md) maps the opt-in phone listener and pairing over Tailscale.
+
 [Dictation](dictation.md), [Meetings](meetings.md), and [Recovery](recovery.md)
 have detailed maps.
 [Accessibility](accessibility.md) maps what screen readers, Voice Control, and

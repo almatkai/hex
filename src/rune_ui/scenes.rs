@@ -8,6 +8,9 @@ use onboarding_kit::scenes::{FirstRun, first_run, mac_first_run};
 pub(super) type Scene = (&'static str, fn(&mut Ui));
 
 pub(super) const SCENES: &[Scene] = &[
+    ("remote-dictation", remote::scene),
+    ("remote-dictation-pairing", remote::pairing_scene),
+    ("remote-dictation-unavailable", remote::unavailable_scene),
     // The running service's real state, for headless snapshots and scripts
     // (`--snap`): waits for its first snapshot instead of drawing
     // "Connecting…" at virtual time zero.

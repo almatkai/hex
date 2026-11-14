@@ -66,6 +66,12 @@ impl Pump {
             Err(command) => command,
         };
         match command {
+            ControlCommand::Remote { action } => {
+                Some(match crate::local_api::remote::command(action) {
+                    Ok(result) => ControlReply::done(result),
+                    Err(error) => ControlReply::error("remote-unavailable", error.to_string()),
+                })
+            }
             ControlCommand::Status => {
                 let meeting = meeting_report(&self.meeting_state);
                 let window = self.window.clone();

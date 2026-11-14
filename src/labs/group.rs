@@ -51,7 +51,8 @@ impl Feature {
     /// The group Labs lists it under. Every feature picks one.
     pub const fn group(self) -> Group {
         match self {
-            Self::LiveText
+            Self::RemoteDictation
+            | Self::LiveText
             | Self::FailureNotices
             | Self::LiveTyping
             | Self::NotchIndicator

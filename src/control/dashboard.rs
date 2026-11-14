@@ -376,6 +376,7 @@ fn draw_activity(
             | VoiceEvent::ApiServerStarted { .. }
             | VoiceEvent::ApiServerStopped { .. }
             | VoiceEvent::ApiAuthFailed { .. } => None,
+            VoiceEvent::RemoteRequest { .. } => None,
         })
         .rev()
         .take(area.height.saturating_sub(2) as usize)

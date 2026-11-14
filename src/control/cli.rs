@@ -33,6 +33,11 @@ pub struct Output {
 /// The control commands at the top of `hex`.
 #[derive(Subcommand, Debug)]
 pub enum ControlCli {
+    /// Pair phones and revoke remote dictation access (Labs).
+    Remote {
+        #[command(subcommand)]
+        action: crate::local_api::remote::Command,
+    },
     /// Sign in to Google Antigravity for meeting summaries.
     Antigravity {
         #[arg(value_enum)]
@@ -420,6 +425,7 @@ pub fn finish(code: u8) -> ! {
 
 pub fn run(command: ControlCli) -> u8 {
     match command {
+        ControlCli::Remote { action } => send(ControlCommand::Remote { action }, Output::default()),
         ControlCli::Antigravity { action } => antigravity::run(action),
         ControlCli::Status { output } => send(ControlCommand::Status, output),
         ControlCli::Start { output } => start(output),

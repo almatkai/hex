@@ -23,6 +23,7 @@ feedback and Run setup again.
 
 ```ts
 Feature             Pane  Toggle (settings.json, hex settings)   On: what it does
+Remote dictation    yes   remote_dictation.enabled + remote_dictation.port + remote_dictation.process_transcripts (every desktop OS) paired phones send audio over Tailscale; off by default
 ├── Meetings (beta) yes   meetings.enabled             (macOS)   Meetings joins the sidebar: call detection, recording, transcripts
 ├── Voice Filter (Dev) yes experimental.hex_microphone (macOS, Linux) Voice Filter joins the sidebar; feeds the Hex Microphone (macOS driver, Linux PipeWire source)
 │                                        a stable build never feeds it; with the macOS driver installed it keeps the pane with Uninstall alone
@@ -2880,3 +2881,10 @@ off, without substituting a different writer. See [Meetings](meetings.md#antigra
 `antigravity_summaries_are_off_by_default_and_available_to_everyone` test checks
 its default, audience, group, round trip and runtime switch. The generator and
 pane availability check the lab and signed-in account separately.
+
+
+Remote dictation has its own [feature map](remote-dictation.md) and
+[API contract](../remote-dictation.md). Its listener checks the runtime Lab
+before accepting work, uses hashed revocable device credentials, and shares
+the local API's bounded transcription/stream handlers. Windows firewall
+setup is manual; no phone-to-PC inference or QR scan has been verified.

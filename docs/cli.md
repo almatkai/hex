@@ -631,3 +631,25 @@ not internal `MODEL_*`, `chat_*`, `tab_*` or image routes. Login/refresh persist
 folder. Expiry includes a five-minute refresh margin. The local callback and
 network operations have deadlines; closing the CLI releases its listener. UI
 sign-in also offers Cancel. No Google call is required for `status` or `logout`.
+
+
+## Remote dictation (Labs)
+
+The running desktop app handles `hex remote pair`, `hex remote devices`,
+and `hex remote revoke <id>` over the authenticated loopback control API.
+All require Labs `remote-dictation` (`remote_dictation.enabled`, default
+false). `pair` prints a version-1 JSON QR payload with the tailnet URL and
+one-use five-minute code; `devices` prints listener state/address and device
+IDs, names and last-use timestamps; `revoke` durably removes access and
+cancels active remote work before the listener restarts. Tokens are returned
+only by the remote `POST /pair` exchange, never by `devices`.
+
+Settings keys: `remote_dictation.enabled` (bool),
+`remote_dictation.port` (integer, 1024?65535, default 47821), and
+`remote_dictation.process_transcripts` (bool, default false). The last
+allows the existing `process=global` pipeline for phone results separately
+from `labs.api_processing`. `hex service` does not open the tailnet listener.
+The control wire version stays 4: the new `remote` command is additive,
+with `action` equal to `pair`, `devices`, or `revoke` (and `id` for revoke).
+See [the remote contract](remote-dictation.md) for pairing, boundaries,
+firewall setup, limits, and Android integration.

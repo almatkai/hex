@@ -162,6 +162,7 @@ impl Feature {
             | Self::CapsLockDictation
             | Self::OpenCodeInWsl
             | Self::TranscribeFiles
+            | Self::RemoteDictation
             | Self::ApiProcessing
             | Self::ApiTimestamps
             | Self::SpeakersOnly
@@ -173,7 +174,7 @@ impl Feature {
     /// The day it joined Labs, as `yyyymmdd`. Labs marks the newest as New.
     pub const fn added(self) -> u32 {
         match self {
-            Self::MeetingAsk => 20261115,
+            Self::MeetingAsk | Self::RemoteDictation => 20261115,
             Self::AntigravitySummaries => 20261113,
             Self::Meetings
             | Self::VoiceFilter
@@ -263,6 +264,9 @@ impl Feature {
     /// The feature `hex settings` key `key` switches (its toggle, or
     /// Unload when idle's minutes).
     pub fn for_settings_key(key: &str) -> Option<Self> {
+        if key.starts_with("remote_dictation.") {
+            return Some(Self::RemoteDictation);
+        }
         if key == "labs.unload_idle_minutes" {
             return Some(Self::UnloadIdle);
         }
@@ -365,6 +369,7 @@ impl Feature {
             | Self::TranscribeFiles
             | Self::ApiProcessing
             | Self::ApiTimestamps
+            | Self::RemoteDictation
             | Self::SpeakersOnly => true,
         }
     }
@@ -442,6 +447,7 @@ impl Feature {
             Self::CapsLockDictation => "caps-lock-dictation",
             Self::OpenCodeInWsl => "opencode-in-wsl",
             Self::TranscribeFiles => "transcribe-files",
+            Self::RemoteDictation => "remote-dictation",
             Self::ApiProcessing => "api-processing",
             Self::ApiTimestamps => "api-timestamps",
             Self::SpeakersOnly => "speakers-only",
@@ -523,6 +529,7 @@ impl Feature {
             Self::CapsLockDictation => "labs.caps_lock_dictation",
             Self::OpenCodeInWsl => "labs.opencode_in_wsl",
             Self::TranscribeFiles => "labs.transcribe_files",
+            Self::RemoteDictation => "remote_dictation.enabled",
             Self::ApiProcessing => "labs.api_processing",
             Self::ApiTimestamps => "labs.api_timestamps",
             Self::SpeakersOnly => "labs.speakers_only",
@@ -608,6 +615,7 @@ impl Feature {
             Self::CapsLockDictation => settings.labs.caps_lock_dictation,
             Self::OpenCodeInWsl => settings.labs.opencode_in_wsl,
             Self::TranscribeFiles => settings.labs.transcribe_files,
+            Self::RemoteDictation => settings.remote_dictation.enabled,
             Self::ApiProcessing => settings.labs.api_processing,
             Self::ApiTimestamps => settings.labs.api_timestamps,
             Self::SpeakersOnly => settings.labs.speakers_only,
@@ -621,6 +629,7 @@ impl Feature {
     pub fn switches(settings: &mut AppSettings) -> Vec<&mut bool> {
         let labs = &mut settings.labs;
         vec![
+            &mut settings.remote_dictation.enabled,
             &mut settings.meetings.enabled,
             &mut settings.experimental.hex_microphone,
             &mut settings.paste_with_shift,
@@ -779,6 +788,7 @@ impl Feature {
             Self::CapsLockDictation => settings.labs.caps_lock_dictation = on,
             Self::OpenCodeInWsl => settings.labs.opencode_in_wsl = on,
             Self::TranscribeFiles => settings.labs.transcribe_files = on,
+            Self::RemoteDictation => settings.remote_dictation.enabled = on,
             Self::ApiProcessing => settings.labs.api_processing = on,
             Self::ApiTimestamps => settings.labs.api_timestamps = on,
             Self::SpeakersOnly => settings.labs.speakers_only = on,

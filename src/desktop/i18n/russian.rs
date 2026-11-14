@@ -15,6 +15,7 @@ pub(super) fn table() -> &'static HashMap<&'static str, &'static str> {
             .iter()
             .copied()
             .chain(super::antigravity::extra(2))
+            .chain(super::remote::extra(2))
             .collect()
     })
 }

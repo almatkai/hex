@@ -219,19 +219,27 @@ fn create(
         .streams
         .create(engine, format, selection, owner_token.clone())
     {
-        Ok(stream) => HttpResponse::json(
-            201,
-            &serde_json::json!({
-                "id": stream.id,
-                "ownerToken": owner_token,
-                "model": stream.selection.model.as_str(),
-                "language": stream.selection.language,
-                "sampleRate": SAMPLE_RATE,
-                "sampleFormat": format.name(),
-                "partials": stream.partials,
-                "leaseMs": LEASE.as_millis() as u64,
-            }),
-        ),
+        Ok(stream) => {
+            if let Some(remote) = &context.remote {
+                remote.track(&stream);
+                if context.shutdown.load(Ordering::Acquire) {
+                    stream.cancel();
+                }
+            }
+            HttpResponse::json(
+                201,
+                &serde_json::json!({
+                    "id": stream.id,
+                    "ownerToken": owner_token,
+                    "model": stream.selection.model.as_str(),
+                    "language": stream.selection.language,
+                    "sampleRate": SAMPLE_RATE,
+                    "sampleFormat": format.name(),
+                    "partials": stream.partials,
+                    "leaseMs": LEASE.as_millis() as u64,
+                }),
+            )
+        }
         Err(CreateError::Busy) => HttpResponse::code(409, "stream-busy"),
         Err(CreateError::Spawn) => HttpResponse::code(500, "stream-start-failed"),
     }

@@ -55,6 +55,7 @@ mod platform;
 mod platform_settings;
 pub(crate) mod playground;
 mod practice;
+mod remote;
 mod scenes;
 #[cfg(hex_capture)]
 mod scrawl;
@@ -673,6 +674,7 @@ pub(crate) struct Ui {
     duck_volume_drag: Option<f32>,
     models: models::Models,
     antigravity: antigravity::Account,
+    remote: remote::RemotePane,
     history: history::HistoryPane,
     #[cfg(hex_capture)]
     captures: captures::CapturesPane,
@@ -792,6 +794,7 @@ impl Ui {
             duck_volume_drag: None,
             models: models::Models::default(),
             antigravity: antigravity::Account::default(),
+            remote: remote::RemotePane::default(),
             history: history::HistoryPane::default(),
             #[cfg(hex_capture)]
             captures: captures::CapturesPane::default(),
@@ -878,6 +881,9 @@ impl Ui {
     /// Meetings turned off forgets its view: turning it back on lists the
     /// recordings.
     fn settings_changed(&mut self) {
+        if !crate::labs::Feature::RemoteDictation.on(&self.settings) {
+            self.remote = remote::RemotePane::default();
+        }
         if !meetings::available(self) {
             self.meetings.view = meetings::View::Recordings;
         }
@@ -1259,6 +1265,7 @@ fn poll(ui: &mut Ui, clock: f64, tx: &mut Tx) -> bool {
     }
     let now = Instant::now();
     let mut changed = ui.save_drafts(now);
+    changed |= remote::poll(ui, clock);
     changed |= paste_access::poll(ui);
     changed |= meetings::questions::poll(ui);
     changed |= ui.antigravity.poll(
@@ -1406,6 +1413,7 @@ fn view(ui: &Ui, cx: &mut Cx<Ui>) -> El {
     let mut layer = Vec::new();
     let (actions, body) = match ui.pane {
         _ if ui.labs_open => (vec![labs::tabs(ui, p)], labs::page(ui, p)),
+        Pane::Remote => (Vec::new(), remote::pane(ui, p)),
         Pane::General => (Vec::new(), general::pane(ui, p, &mut layer)),
         Pane::Output => (Vec::new(), output::pane(ui, p, cx.is_reduced_motion())),
         Pane::Modes => modes::pane(ui, p, &mut layer),
