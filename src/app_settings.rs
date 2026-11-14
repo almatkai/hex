@@ -33,7 +33,8 @@ mod shortcut_repair;
 #[cfg(hex_capture)]
 pub use capture::*;
 pub use dictation_processing::{
-    DictationMode, DictationPostProcessing, DictationProcessingSettings,
+    DictationMode, DictationPostProcessing, DictationProcessingSettings, RewriteLanguage,
+    RewriteProvider, RewriteStyle,
 };
 pub use extra_shortcuts::*;
 pub use hotkeys::*;

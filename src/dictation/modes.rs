@@ -12,7 +12,7 @@ use crate::dictation::processor::{PostProcessingSettings, Processed, Profile, Pr
 use crate::dictation::text_replacements::ReplacementSet;
 
 /// Live mode-processing snapshot. The output worker clones it before any
-/// deadline-bounded OpenCode call, so settings writes never wait on
+/// deadline-bounded rewrite call, so settings writes never wait on
 /// inference.
 #[derive(Clone)]
 pub struct ModeRuntime {
@@ -142,7 +142,10 @@ pub(crate) fn uses_page(settings: &DictationProcessingSettings) -> bool {
         || std::iter::once(&settings.default_mode)
             .chain(&settings.modes)
             .any(|mode| {
-                mode.post_processing.enabled
+                (mode.post_processing.enabled
+                    && mode.post_processing.provider
+                        == crate::app_settings::RewriteProvider::OpenCode
+                    && mode.post_processing.style == crate::app_settings::RewriteStyle::Custom)
                     || mode
                         .transformations
                         .iter()
@@ -257,6 +260,25 @@ pub fn canonical_host(entry: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn antigravity_rewriting_does_not_read_the_page_unless_another_step_needs_it() {
+        use crate::app_settings::{DictationProcessingSettings, RewriteProvider};
+        let mut settings = DictationProcessingSettings::default();
+        settings.default_mode.post_processing.enabled = true;
+        settings.default_mode.post_processing.provider = RewriteProvider::Antigravity;
+        assert!(!super::uses_page(&settings));
+        settings
+            .default_mode
+            .transformations
+            .push("my-script".into());
+        assert!(super::uses_page(&settings));
+        settings.default_mode.transformations.clear();
+        settings.modes.push(crate::app_settings::DictationMode {
+            browser_hosts: vec!["example.com".into()],
+            ..Default::default()
+        });
+        assert!(super::uses_page(&settings));
+    }
     use super::*;
 
     fn mode(name: &str, applications: &[&str], browser_hosts: &[&str]) -> DictationMode {

@@ -38,7 +38,11 @@ fn fake(status: u16, body: &'static str) -> (String, std::thread::JoinHandle<Str
         .unwrap();
         // Deliberately split UTF-8 and SSE framing over transport reads.
         for b in body.as_bytes().chunks(3) {
-            s.write_all(b).unwrap();
+            // A client rejects an HTTP error at its headers, without reading
+            // this body. Windows can reset that socket before we finish it.
+            if s.write_all(b).is_err() {
+                break;
+            }
         }
         String::from_utf8(bytes).unwrap()
     });
@@ -277,6 +281,173 @@ fn credential() -> Credentials {
         expires: 0,
         project_id: "project".into(),
         email: "test@example.com".into(),
+    }
+}
+
+fn rewriting_profiles() -> crate::dictation::processor::Profiles {
+    use crate::app_settings::{DictationPostProcessing, RewriteProvider, RewriteStyle};
+    use crate::dictation::processor::{Profile, Profiles};
+    use crate::dictation::text_replacements::{ReplacementSet, TextReplacement};
+    Profiles::new(Profile::configured(
+        "Punctuate",
+        ReplacementSet::new(&[TextReplacement {
+            matched_phrase: "превет".into(),
+            output: "привет".into(),
+        }]),
+        vec!["lowercase".into()],
+        &DictationPostProcessing {
+            enabled: true,
+            provider: RewriteProvider::Antigravity,
+            style: RewriteStyle::Punctuate,
+            ..Default::default()
+        },
+    ))
+}
+
+#[test]
+#[ignore = "makes one live generation with the signed-in Antigravity account"]
+fn live_antigravity_punctuate_russian() {
+    let text = generate(
+        DEFAULT_MODEL,
+        crate::dictation::processor::rewriting::PUNCTUATE,
+        "привет как дела сегодня хорошая погода",
+        Duration::from_secs(30),
+        &AtomicBool::new(false),
+    )
+    .unwrap();
+    assert!(text.starts_with('П'), "capitalization: {text}");
+    assert!(
+        text.contains('?') || text.contains('.'),
+        "punctuation: {text}"
+    );
+    assert!(text.to_lowercase().contains("хорошая погода"));
+    println!("Punctuate: {text}");
+}
+
+#[test]
+fn rewriting_http_sends_only_corrected_dictation_and_error_falls_back() {
+    use crate::dictation::processor::{Source, rewriting::Request};
+    for status in [200, 429] {
+        let (url, server) = fake(
+            status,
+            if status == 200 {
+                SSE
+            } else {
+                "private transcript in error body"
+            },
+        );
+        let context = crate::dictation::context::ContextSnapshot {
+            application: Some("PRIVATE APPLICATION".into()),
+            ..Default::default()
+        };
+        let result = rewriting_profiles().process_using(
+            "превет как дела",
+            "ru",
+            &context,
+            &AtomicBool::new(false),
+            Source::Dictation,
+            true,
+            |request, timeout, cancel| {
+                let Request::Antigravity {
+                    model,
+                    instructions,
+                    transcript,
+                } = request
+                else {
+                    panic!("wrong provider")
+                };
+                generate_at(
+                    &[&url],
+                    &credential(),
+                    model,
+                    &instructions,
+                    transcript,
+                    Instant::now() + timeout,
+                    cancel,
+                )
+                .map_err(public_error)
+            },
+        );
+        assert_eq!(
+            result.text,
+            if status == 200 {
+                "héllo"
+            } else {
+                "привет как дела"
+            }
+        );
+        let observation = result.observation.unwrap();
+        assert_eq!(observation.fallback.is_some(), status != 200);
+        assert!(!format!("{observation:?}").contains("private transcript"));
+        assert_eq!(result.transformations, ["lowercase"]);
+        let request = server.join().unwrap();
+        let body: Value = serde_json::from_str(request.split_once("\r\n\r\n").unwrap().1).unwrap();
+        assert_eq!(
+            body["request"]["contents"],
+            json!([{"role":"user","parts":[{"text":"привет как дела"}]}])
+        );
+        assert!(body["request"]["tools"].is_null());
+        assert!(!request.contains("PRIVATE APPLICATION"));
+        assert!(!request.contains("test@example.com"));
+        let instruction = body["request"]["systemInstruction"]["parts"][0]["text"]
+            .as_str()
+            .unwrap();
+        assert!(instruction.contains("Russian and Kazakh"));
+        assert!(instruction.contains("Output only the restored text"));
+    }
+}
+
+#[test]
+fn rewriting_http_stall_and_cancellation_fall_back_without_waiting_for_the_server() {
+    use crate::dictation::processor::{Source, rewriting::Request};
+    for cancelled in [false, true] {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://{}", listener.local_addr().unwrap());
+        let cancel = std::sync::Arc::new(AtomicBool::new(false));
+        let trigger = cancel.clone();
+        let (release, held) = std::sync::mpsc::channel();
+        let server = std::thread::spawn(move || {
+            let (_stream, _) = listener.accept().unwrap();
+            if cancelled {
+                trigger.store(true, Ordering::Release);
+            }
+            // Keep headers stalled until the caller has already fallen back.
+            let _ = held.recv_timeout(Duration::from_secs(5));
+        });
+        let start = Instant::now();
+        let result = rewriting_profiles().process_using(
+            "превет",
+            "ru",
+            &crate::dictation::context::ContextSnapshot::default(),
+            &cancel,
+            Source::Dictation,
+            true,
+            |request, _, cancel| {
+                let Request::Antigravity {
+                    model,
+                    instructions,
+                    transcript,
+                } = request
+                else {
+                    panic!("wrong provider")
+                };
+                generate_at(
+                    &[&url],
+                    &credential(),
+                    model,
+                    &instructions,
+                    transcript,
+                    start + Duration::from_millis(150),
+                    cancel,
+                )
+                .map_err(public_error)
+            },
+        );
+        assert!(start.elapsed() < Duration::from_secs(2));
+        assert_eq!(result.text, "привет");
+        assert!(result.observation.unwrap().fallback.is_some());
+        release.send(()).unwrap();
+        server.join().unwrap();
     }
 }
 

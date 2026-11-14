@@ -60,7 +60,7 @@ pub(super) enum Pane {
     /// What Hex does to every dictation and in some apps, read-only: the
     /// person's agent edits it.
     Output,
-    /// The old per-app editor, kept for its scenes until it is removed.
+    /// The per-app editor, exposed by Labs › Antigravity rewriting.
     Modes,
     /// Recorded calls and their settings, or the opt-in (macOS beta).
     Meetings,
@@ -106,7 +106,8 @@ impl Pane {
         let caps = ui.platform.caps;
         match self {
             Pane::Remote => crate::labs::Feature::RemoteDictation.on(&ui.settings),
-            Pane::Modes | Pane::HudLab | Pane::Activity => false,
+            Pane::Modes => ui.settings.labs.antigravity_rewriting,
+            Pane::HudLab | Pane::Activity => false,
             Pane::Meetings => caps.meetings && meetings::available(ui),
             // On from Labs (dev builds), or while its driver is installed.
             Pane::VoiceFilter => caps.fun && fun::running(ui),

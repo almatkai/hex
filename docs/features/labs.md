@@ -29,6 +29,7 @@ Remote dictation    yes   remote_dictation.enabled + remote_dictation.port + rem
 │                                        a stable build never feeds it; with the macOS driver installed it keeps the pane with Uninstall alone
 ├── Playground (Dev) yes  labs.playground                        a Playground sidebar item and ⇧⌘D open the story browser
 ├── Live text       no    labs.live_text                         provisional words beside the HUD while dictating
+├── Antigravity rewriting yes labs.antigravity_rewriting (every OS, Everyone) Modes joins the sidebar with per-mode OpenCode/Antigravity rewriting, Punctuate and Translate profiles, and the shared Google account sign-in; off skips Antigravity before any credentials or HTTP work (modes.md)
 ├── Failure notices no    labs.failure_notices                   when a dictation fails, its explanation sits beside the HUD for about 6 s, or until the next capture starts
 ├── Live typing     no    labs.live_typing                       (Linux Wayland) provisional words as an underlined input-method preedit in the focused field; the final text is committed there instead of pasted
 ├── Settings search no    labs.settings_search                  a search field atop General filters its rows, Advanced's included

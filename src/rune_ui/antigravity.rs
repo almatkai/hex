@@ -133,7 +133,7 @@ impl Account {
     }
 }
 
-pub(super) fn rows(ui: &Ui, p: Paint, layer: &mut Vec<El>) -> Vec<CardRow> {
+pub(super) fn account_row(ui: &Ui, p: Paint) -> El {
     let account = &ui.antigravity;
     let busy = account.signing;
     let label = if busy {
@@ -165,24 +165,31 @@ pub(super) fn rows(ui: &Ui, p: Paint, layer: &mut Vec<El>) -> Vec<CardRow> {
         .as_deref()
         .or(account.snapshot.email.as_deref())
         .unwrap_or(tr("Sign in to Antigravity"));
-    let mut rows = vec![
-        controls::setting_row(
-            p,
-            "antigravity-account",
-            tr("Antigravity"),
-            Some(description),
-            control,
-        )
-        .into(),
-    ];
-    let models = if account.snapshot.models.is_empty() {
-        crate::antigravity::MODELS
-            .iter()
-            .map(|s| s.to_string())
-            .collect()
-    } else {
-        account.snapshot.models.clone()
-    };
+    controls::setting_row(
+        p,
+        "antigravity-account",
+        tr("Antigravity"),
+        Some(description),
+        control,
+    )
+}
+
+impl Account {
+    pub(super) fn model_ids(&self) -> Vec<String> {
+        if self.snapshot.models.is_empty() {
+            crate::antigravity::MODELS
+                .iter()
+                .map(|s| s.to_string())
+                .collect()
+        } else {
+            self.snapshot.models.clone()
+        }
+    }
+}
+
+pub(super) fn rows(ui: &Ui, p: Paint, layer: &mut Vec<El>) -> Vec<CardRow> {
+    let mut rows = vec![account_row(ui, p).into()];
+    let models = ui.antigravity.model_ids();
     let choices = models
         .into_iter()
         .map(|m| Choice {

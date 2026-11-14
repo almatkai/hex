@@ -669,6 +669,56 @@ mod tests {
             .settings;
         assert!(!settings.labs.meeting_ask);
     }
+
+    #[test]
+    fn antigravity_rewriting_has_cli_keys_for_the_lab_and_per_mode_fields() {
+        use crate::app_settings::{RewriteLanguage, RewriteProvider, RewriteStyle};
+        let settings = apply(
+            &AppSettings::default(),
+            "labs.antigravity_rewriting",
+            "true",
+            &rules(),
+        )
+        .unwrap()
+        .settings;
+        let mut mode = settings.dictation_processing.default_mode.clone();
+        mode.post_processing.enabled = true;
+        mode.post_processing.provider = RewriteProvider::Antigravity;
+        mode.post_processing.antigravity_model = "claude-sonnet-4-6".into();
+        mode.post_processing.style = RewriteStyle::Translate;
+        mode.post_processing.target_language = RewriteLanguage::Kazakh;
+        let settings = apply(
+            &settings,
+            "dictation_processing.default_mode",
+            &serde_json::to_string(&mode).unwrap(),
+            &rules(),
+        )
+        .unwrap()
+        .settings;
+        assert_eq!(settings.dictation_processing.default_mode, mode);
+        let settings = apply(
+            &settings,
+            "dictation_processing.modes",
+            &serde_json::to_string(&vec![mode.clone()]).unwrap(),
+            &rules(),
+        )
+        .unwrap()
+        .settings;
+        assert_eq!(settings.dictation_processing.modes, [mode]);
+        let settings = apply(&settings, "labs.antigravity_rewriting", "false", &rules())
+            .unwrap()
+            .settings;
+        assert!(!settings.labs.antigravity_rewriting);
+        assert_eq!(
+            settings
+                .dictation_processing
+                .default_mode
+                .post_processing
+                .provider,
+            RewriteProvider::Antigravity
+        );
+    }
+
     #[test]
     fn antigravity_settings_require_the_lab_and_validate_model_ids() {
         let settings = crate::app_settings::AppSettings::default();

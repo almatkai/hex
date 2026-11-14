@@ -579,3 +579,42 @@ fn a_managed_lock_reads_off_and_never_rewrites_the_saved_switch() {
     assert!(unmanaged.meetings.enabled);
     assert!(unmanaged.labs.live_text);
 }
+
+#[test]
+fn antigravity_rewriting_settings_round_trip_and_old_profiles_keep_opencode() {
+    use crate::app_settings::{
+        DictationMode, DictationPostProcessing, RewriteLanguage, RewriteProvider, RewriteStyle,
+    };
+    let mut settings = AppSettings::default();
+    settings.labs.antigravity_rewriting = true;
+    settings.dictation_processing.default_mode.post_processing = DictationPostProcessing {
+        enabled: true,
+        provider: RewriteProvider::Antigravity,
+        style: RewriteStyle::Punctuate,
+        antigravity_model: "claude-sonnet-4-6".into(),
+        model: Some("opencode/remembered".into()),
+        ..Default::default()
+    };
+    settings.dictation_processing.modes.push(DictationMode {
+        name: "Translate".into(),
+        post_processing: DictationPostProcessing {
+            enabled: true,
+            provider: RewriteProvider::Antigravity,
+            style: RewriteStyle::Translate,
+            target_language: RewriteLanguage::Kazakh,
+            ..Default::default()
+        },
+        ..Default::default()
+    });
+    let (read, repaired) = decode(&serde_json::to_vec(&settings).unwrap());
+    assert!(!repaired);
+    assert!(read.labs.antigravity_rewriting);
+    assert_eq!(read.dictation_processing, settings.dictation_processing);
+    let (old, repaired) = decode(br#"{"dictation_processing":{"default_mode":{"post_processing":{"enabled":true,"model":"provider/model"}}}}"#);
+    assert!(!repaired);
+    let rewrite = old.dictation_processing.default_mode.post_processing;
+    assert_eq!(rewrite.provider, RewriteProvider::OpenCode);
+    assert_eq!(rewrite.style, RewriteStyle::Custom);
+    assert_eq!(rewrite.model.as_deref(), Some("provider/model"));
+    assert!(!old.labs.antigravity_rewriting);
+}

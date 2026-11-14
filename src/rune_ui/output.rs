@@ -133,10 +133,21 @@ fn steps(ui: &Ui, mode: &DictationMode) -> Vec<Step> {
             runner: Runner::BuiltIn,
         });
     }
-    if mode.post_processing.enabled {
+    let antigravity =
+        mode.post_processing.provider == crate::app_settings::RewriteProvider::Antigravity;
+    if mode.post_processing.enabled && (!antigravity || ui.settings.labs.antigravity_rewriting) {
         steps.push(Step {
-            title: tr("Rewrite with OpenCode").into(),
-            detail: mode.post_processing.model.clone(),
+            title: if antigravity {
+                tr("Antigravity rewriting")
+            } else {
+                tr("Rewrite with OpenCode")
+            }
+            .into(),
+            detail: if antigravity {
+                Some(mode.post_processing.antigravity_model.clone())
+            } else {
+                mode.post_processing.model.clone()
+            },
             runner: Runner::Rewrite,
         });
     }
@@ -759,6 +770,12 @@ fn agent_prompt(fix: Option<(&str, &str)>) -> String {
          \"<provider/model>\", \"deadline_seconds\": 30}}. Leave `model` out and Hex \
          picks a fast one you have connected; set it only if I ask for a particular \
          model (`opencode2 models` lists them). \
+         With `labs.antigravity_rewriting` on, `provider` can be \"antigravity\" \
+         instead of the default \"opencode\"; `antigravity_model` names its model. \
+         It shares the Google account signed in through Modes or Meetings. \
+         `style` can be \"custom\" (uses `prompt`), \"punctuate\" (capitalization, \
+         punctuation and digits, preserving language and wording), or \"translate\" \
+         (translation only, with `target_language` \"english\", \"russian\", or \"kazakh\"). \
          If the rewrite fails or runs past the deadline, Hex pastes the text without it.\n\
          \n\
          Built-in transformations: \"lowercase\", \"no-trailing-punctuation\", \

@@ -1248,6 +1248,10 @@ Gaps: the bar and touch are not verified on a real Windows PC or touchscreen.
 
 ## Process Text With Modes
 
+[Antigravity rewriting](modes.md) adds a provider choice and the Punctuate and
+Translate profiles behind Labs, off by default. While enabled, Modes joins the
+sidebar so these per-mode controls and the shared Google sign-in are reachable.
+
 ```ts
 Output (main sidebar, replaces the Modes editor) // rune_ui/output.rs; scenes output*
 ├── Trust prompt -> Allow a config that uses fetch or programs (only when one asks)
@@ -1264,7 +1268,7 @@ Output (main sidebar, replaces the Modes editor) // rune_ui/output.rs; scenes ou
 │   unbound by default: copies the focused field, runs its Output steps, re-checks the
 │   selection, and replaces it (labs.md, dictation.md)
 └── In some apps -> Each mode's apps and its steps (Only: …), opens to list them
-    // the old Modes editor stays in the code for its scenes, unreachable
+    // Modes joins the sidebar while Labs > Antigravity rewriting is on
 
 Foreground context -> Select processing
 ├── Matching website                     // macOS: scriptable browsers, then AXWebArea; Windows: UIA; Linux: AT-SPI
@@ -1275,7 +1279,7 @@ Foreground context -> Select processing
 Selected mode                            // replaces Global's rewrite and transformations
   -> Its vocabulary, then the shared one   // features/vocabulary.md (vocabulary.modes)
   -> Global's corrections, then the mode's  // every OS
-  -> OpenCode transformation             // optional provider-backed rewrite
+  -> OpenCode or Antigravity rewrite      // Antigravity requires its Labs opt-in
   -> Transformations                     // ordered text chain
   -> Paste or Send
 
@@ -1292,7 +1296,8 @@ instructions (`PROTOCOL_PROMPT`) now say to keep every number as said (no
 dropped, merged, or reformatted numbers, no added thousands separators) and,
 unless the mode's prompt says otherwise, to write a spoken enumeration
 ("point one … point two …") as a numbered list, one item per line. A
-transcript of numbers alone (digits or English number words) skips the
+transcript of numbers alone (digits or English number words), in a Custom
+instructions profile, skips the
 rewrite and pastes after corrections as heard; transformations still run.
 Check: `numbers_only_transcripts_skip_the_rewrite` in
 [dictation/processor.rs](../../src/dictation/processor.rs). The prompt rules

@@ -21,6 +21,7 @@ impl Feature {
             Self::MeetingAsk => {
                 "Ask questions about a meeting with Antigravity; sends transcript excerpts to Google"
             }
+            Self::AntigravityRewriting => "Rewrite dictation with your Google Antigravity account",
             Self::AntigravitySummaries => {
                 "Write meeting summaries with your Google Antigravity account"
             }

@@ -156,6 +156,13 @@ pub(super) const SCENES: &[Scene] = &[
         modes::fixture(ui);
         ui.pane = Pane::Modes;
     }),
+    ("modes-antigravity", |ui| rewriting_scene(ui, true, false)),
+    ("modes-antigravity-signed-out", |ui| {
+        rewriting_scene(ui, false, false)
+    }),
+    ("modes-antigravity-translate", |ui| {
+        rewriting_scene(ui, true, true)
+    }),
     ("modes-opencode-not-running", |ui| {
         *ui = portal_fixture();
         modes::fixture(ui);
@@ -1010,4 +1017,22 @@ fn antigravity_settings(ui: &mut Ui, caps: platform::Capabilities, signed_in: bo
     ui.meetings.view = meetings::View::Settings;
     ui.pane = Pane::Meetings;
     ui.antigravity = antigravity::Account::fixture(signed_in);
+}
+
+fn rewriting_scene(ui: &mut Ui, signed_in: bool, translate: bool) {
+    use crate::app_settings::{RewriteLanguage, RewriteProvider, RewriteStyle};
+    *ui = portal_fixture();
+    modes::fixture(ui);
+    ui.settings.labs.antigravity_rewriting = true;
+    let rewrite = &mut ui.settings.dictation_processing.modes[0].post_processing;
+    rewrite.provider = RewriteProvider::Antigravity;
+    rewrite.style = if translate {
+        RewriteStyle::Translate
+    } else {
+        RewriteStyle::Punctuate
+    };
+    rewrite.target_language = RewriteLanguage::Kazakh;
+    ui.antigravity = antigravity::Account::fixture(signed_in);
+    ui.models = models::Models::fixture_not_running();
+    ui.pane = Pane::Modes;
 }

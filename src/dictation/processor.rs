@@ -1,3 +1,5 @@
+pub(crate) mod rewriting;
+
 use std::collections::HashSet;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
@@ -53,6 +55,7 @@ pub struct Profile {
     ai_enabled: bool,
     prompt: String,
     model: Option<Model>,
+    rewrite: PostProcessingSettings,
     deadline: Duration,
     replacements: ReplacementSet,
     transformations: Vec<String>,
@@ -64,12 +67,19 @@ pub struct Profile {
 }
 
 impl Profile {
+    fn rewrites_with(&self, antigravity_enabled: bool) -> bool {
+        self.ai_enabled
+            && (self.rewrite.provider != crate::app_settings::RewriteProvider::Antigravity
+                || antigravity_enabled)
+    }
+
     pub fn new(name: impl Into<String>, prompt: impl Into<String>) -> Self {
         Self {
             name: name.into(),
             ai_enabled: false,
             prompt: prompt.into(),
             model: None,
+            rewrite: PostProcessingSettings::default(),
             deadline: Duration::from_secs(30),
             replacements: ReplacementSet::default(),
             transformations: Vec::new(),
@@ -186,6 +196,7 @@ impl Profile {
             .ai_enabled(settings.enabled && !policy.locks(Lock::OpenCodeProcessing))
             .replacements(replacements)
             .transformations(transformations);
+        profile.rewrite = settings.clone();
         if let Some((provider, model)) = settings
             .model
             .as_deref()
@@ -362,7 +373,8 @@ impl Profiles {
 
     pub fn processes(&self, context: &ContextSnapshot) -> bool {
         let profile = self.select(context);
-        profile.ai_enabled || !profile.transformations.is_empty()
+        profile.rewrites_with(crate::labs::antigravity_rewriting())
+            || !profile.transformations.is_empty()
     }
 
     pub fn process_cancellable(
@@ -373,7 +385,30 @@ impl Profiles {
         cancelled: &AtomicBool,
         source: Source,
     ) -> Processed {
+        self.process_using(
+            transcript,
+            language,
+            context,
+            cancelled,
+            source,
+            crate::labs::antigravity_rewriting(),
+            rewriting::generate,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn process_using(
+        &self,
+        transcript: &str,
+        language: &str,
+        context: &ContextSnapshot,
+        cancelled: &AtomicBool,
+        source: Source,
+        antigravity_enabled: bool,
+        generate: impl FnOnce(rewriting::Request<'_>, Duration, &AtomicBool) -> Result<String>,
+    ) -> Processed {
         let profile = self.select(context);
+        let ai_enabled = profile.rewrites_with(antigravity_enabled);
         // Labs › Spoken formatting, spoken symbols, and filler words only
         // make sense for speech: typed text starts from what is already
         // written and skips them.
@@ -392,27 +427,30 @@ impl Profiles {
             .replace(&self.global.replace(&prepared));
         // A transcript of numbers alone has nothing to rewrite; a model only
         // turns it into digits and re-punctuates it (#949).
-        let numbers_only = profile.ai_enabled && numbers_only(&corrected);
+        let numbers_only = ai_enabled
+            && profile.rewrite.style == crate::app_settings::RewriteStyle::Custom
+            && numbers_only(&corrected);
         if numbers_only {
             tracing::info!(
                 profile = profile.name,
                 "dictation post-processing skipped for a numbers-only transcript"
             );
         }
-        if !profile.ai_enabled {
+        if !ai_enabled {
             tracing::info!(
                 profile = profile.name,
-                "dictation post-processing skipped: the OpenCode rewrite is off for this mode"
+                "dictation post-processing skipped: the rewrite is off for this mode"
             );
         }
-        if !profile.ai_enabled || numbers_only {
+        if !ai_enabled || numbers_only {
             return Processed {
                 text: corrected,
                 observation: None,
                 transformations: profile.transformations.clone(),
             };
         }
-        let prompt = prompt(
+        let started = Instant::now();
+        let request = rewriting::request(
             profile,
             &corrected,
             context,
@@ -421,14 +459,8 @@ impl Profiles {
                 &crate::dictation::vocabulary::entries(),
             ),
         );
-        let (text, observation) = generate_observed(
-            &prompt,
-            profile.model.as_ref(),
-            profile.deadline,
-            cancelled,
-            &profile.name,
-            Instant::now(),
-        );
+        let result = generate(request, profile.deadline, cancelled);
+        let (text, observation) = observe(result, &profile.name, started);
         match &observation.fallback {
             None => tracing::info!(
                 profile = profile.name,
@@ -540,16 +572,12 @@ pub(crate) fn generate_text_with(
 /// Runs one generation and reports it as a processing observation. The text is
 /// `None` whenever the caller must fall back, with the reason recorded in the
 /// observation.
-fn generate_observed(
-    prompt: &str,
-    model: Option<&Model>,
-    deadline: Duration,
-    cancelled: &AtomicBool,
+fn observe(
+    result: Result<String>,
     profile_name: &str,
     started: Instant,
 ) -> (Option<String>, ProcessingObservation) {
-    let result = generate_cancellable(prompt, model, deadline, cancelled);
-    let (text, fallback) = match result.map(|generated| generated.text) {
+    let (text, fallback) = match result {
         Ok(text) if !text.trim().is_empty() => (Some(text.trim().into()), None),
         Ok(_) => (None, Some("processor returned empty text".into())),
         Err(error) => (None, Some(error.to_string())),
@@ -944,6 +972,12 @@ fn prompt(
     context: &ContextSnapshot,
     vocabulary: &[VocabularyEntry],
 ) -> String {
+    if profile.rewrite.style != crate::app_settings::RewriteStyle::Custom {
+        return format!(
+            "{}\n\n<transcript>\n{transcript}\n</transcript>",
+            rewriting::instructions(&profile.rewrite, &profile.prompt)
+        );
+    }
     let application = context.application.as_deref().unwrap_or("unknown");
     let host = context.browser_host().unwrap_or("none");
     format!(

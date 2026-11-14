@@ -668,6 +668,11 @@ pub(super) const KEYS: &[Key] = &[
     ),
     key("labs.meeting_ask", Kind::Bool, "Labs: Ask meetings"),
     key(
+        "labs.antigravity_rewriting",
+        Kind::Bool,
+        "Labs: rewrite dictation with Antigravity",
+    ),
+    key(
         "labs.antigravity_summaries",
         Kind::Bool,
         "Labs: Antigravity summaries",

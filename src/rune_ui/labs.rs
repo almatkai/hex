@@ -34,7 +34,11 @@ pub(super) static LABS_ICON: Icon = Icon {
 /// features turned on (Meetings and Voice Filter from Labs, Annotate in dev
 /// builds).
 pub(super) fn main_panes(ui: &Ui) -> Vec<Pane> {
-    let mut panes = vec![Pane::General, Pane::Output, Pane::History];
+    let mut panes = vec![Pane::General, Pane::Output];
+    if ui.settings.labs.antigravity_rewriting {
+        panes.push(Pane::Modes);
+    }
+    panes.push(Pane::History);
     #[cfg(hex_capture)]
     let optional = [
         Pane::Captures,
@@ -331,6 +335,12 @@ fn rows(ui: &Ui) -> Vec<Row> {
         None,
         tr("Ask meetings"),
         tr("Ask questions about a meeting with Antigravity; sends transcript excerpts to Google"),
+    ));
+    rows.push(row(
+        Feature::AntigravityRewriting,
+        None,
+        tr("Antigravity rewriting"),
+        tr("Rewrite dictation with your Google Antigravity account"),
     ));
     rows.push(row(
         Feature::AntigravitySummaries,
@@ -921,6 +931,7 @@ fn row_key(lab: Lab) -> &'static str {
         Feature::LiveChapters => "lab-live-chapters",
         Feature::MeetingAsk => "lab-meeting-ask",
         Feature::AntigravitySummaries => "lab-antigravity-summaries",
+        Feature::AntigravityRewriting => "lab-antigravity-rewriting",
         Feature::VocabularyBiasing => "lab-vocabulary-biasing",
         Feature::TerminalPaste => "lab-terminal-paste",
         Feature::KeyboardModelSwitching => "lab-keyboard-model-switching",

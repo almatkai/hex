@@ -10,6 +10,7 @@ pub(super) fn run(action: AntigravityAction) -> u8 {
     let result = match action {
         AntigravityAction::Login
             if !crate::labs::antigravity_summaries()
+                && !crate::labs::antigravity_rewriting()
                 && !crate::labs::Feature::MeetingAsk
                     .saved_on(&crate::app_settings::AppSettings::read().unwrap_or_default()) =>
         {

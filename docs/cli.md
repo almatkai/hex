@@ -596,13 +596,52 @@ removed `permissions.input_monitoring` from the status reply; version 3 removed
 ## Antigravity account
 
 ```sh
+hex settings set labs.antigravity_summaries true
 hex antigravity login
 hex antigravity status
 hex antigravity logout
-hex settings set labs.antigravity_summaries true
 hex settings set meetings.summaries antigravity
 hex settings set meetings.antigravity_model gemini-3.8-flash
 ```
+
+Dictation can reuse that account independently of meeting summaries:
+
+```sh
+hex settings set labs.antigravity_rewriting true
+hex antigravity login
+hex settings get dictation_processing.default_mode --json
+hex settings get dictation_processing.modes --json
+```
+
+The lab is off by default, available to everyone on every OS, and checked where
+the rewrite starts. While on, Modes joins the sidebar. In either JSON-valued
+mode setting, configure the existing `post_processing` object with:
+
+```json
+{
+  "enabled": true,
+  "provider": "antigravity",
+  "antigravity_model": "gemini-3.8-flash",
+  "style": "punctuate",
+  "target_language": "english",
+  "deadline_seconds": 30
+}
+```
+
+Read the mode first and preserve its other fields when writing the updated
+object with `hex settings set dictation_processing.default_mode <json>` or the
+updated array with `hex settings set dictation_processing.modes <json>`.
+`provider` is `opencode` (the backward-compatible default) or `antigravity`;
+OpenCode's `model` and `variant` remain independent of `antigravity_model`.
+`style` is `custom` (default, uses `prompt`), `punctuate` (capitalization,
+punctuation and spoken numbers to digits, preserving Russian/Kazakh and other
+languages and wording), or `translate` (translation only). Translation uses
+`target_language`: `english`, `russian`, or `kazakh` (default `english`).
+Only this corrected transcript and its rewrite instructions reach Antigravity,
+without foreground app/site or vocabulary context. Failure, empty output,
+timeout, or cancellation falls back to the corrected transcript; transformations
+still follow. Turning the lab off skips Antigravity and keeps the saved choices.
+Account login requires either Antigravity lab; Meetings need not be enabled.
 
 The Antigravity desktop client's OAuth secret is not in the repository. Hex
 reads it from `ANTIGRAVITY_CLIENT_SECRET`, else from

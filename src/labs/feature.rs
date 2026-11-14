@@ -14,6 +14,7 @@ pub enum Feature {
     LiveChapters,
     AntigravitySummaries,
     MeetingAsk,
+    AntigravityRewriting,
     VocabularyBiasing,
     TerminalPaste,
     KeyboardModelSwitching,
@@ -84,7 +85,7 @@ pub enum Feature {
 }
 
 impl Feature {
-    pub const ALL: [Self; 76] = [
+    pub const ALL: [Self; 77] = [
         Self::Meetings,
         Self::VoiceFilter,
         Self::Playground,
@@ -94,6 +95,7 @@ impl Feature {
         Self::LiveChapters,
         Self::AntigravitySummaries,
         Self::MeetingAsk,
+        Self::AntigravityRewriting,
         Self::VocabularyBiasing,
         Self::TerminalPaste,
         Self::KeyboardModelSwitching,

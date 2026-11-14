@@ -100,6 +100,7 @@ impl Feature {
             | Self::LiveTyping
             | Self::AntigravitySummaries
             | Self::MeetingAsk
+            | Self::AntigravityRewriting
             | Self::LiveChapters
             | Self::VocabularyBiasing
             | Self::TerminalPaste
@@ -176,6 +177,7 @@ impl Feature {
         match self {
             Self::MeetingAsk | Self::RemoteDictation => 20261115,
             Self::AntigravitySummaries => 20261113,
+            Self::AntigravityRewriting => 20261115,
             Self::Meetings
             | Self::VoiceFilter
             | Self::Playground
@@ -287,7 +289,7 @@ impl Feature {
     /// Whether this OS has the feature at all, in any build.
     pub fn on_this_os(self) -> bool {
         match self {
-            Self::AntigravitySummaries | Self::MeetingAsk => true,
+            Self::AntigravitySummaries | Self::MeetingAsk | Self::AntigravityRewriting => true,
             Self::Meetings
             | Self::LiveChapters
             | Self::SubtitleExport
@@ -386,6 +388,7 @@ impl Feature {
             Self::LiveChapters => "live-chapters",
             Self::MeetingAsk => "meeting-ask",
             Self::AntigravitySummaries => "antigravity-summaries",
+            Self::AntigravityRewriting => "antigravity-rewriting",
             Self::VocabularyBiasing => "vocabulary-biasing",
             Self::TerminalPaste => "terminal-paste",
             Self::KeyboardModelSwitching => "keyboard-model-switching",
@@ -468,6 +471,7 @@ impl Feature {
             Self::LiveChapters => "labs.live_chapters",
             Self::MeetingAsk => "labs.meeting_ask",
             Self::AntigravitySummaries => "labs.antigravity_summaries",
+            Self::AntigravityRewriting => "labs.antigravity_rewriting",
             Self::VocabularyBiasing => "labs.vocabulary_biasing",
             Self::TerminalPaste => "paste_with_shift",
             Self::KeyboardModelSwitching => "keyboard_model_switching.enabled",
@@ -554,6 +558,7 @@ impl Feature {
             Self::LiveChapters => settings.labs.live_chapters,
             Self::MeetingAsk => settings.labs.meeting_ask,
             Self::AntigravitySummaries => settings.labs.antigravity_summaries,
+            Self::AntigravityRewriting => settings.labs.antigravity_rewriting,
             Self::VocabularyBiasing => settings.labs.vocabulary_biasing,
             Self::TerminalPaste => settings.paste_with_shift,
             Self::KeyboardModelSwitching => settings.keyboard_model_switching.enabled,
@@ -643,6 +648,7 @@ impl Feature {
             &mut labs.live_chapters,
             &mut labs.antigravity_summaries,
             &mut labs.meeting_ask,
+            &mut labs.antigravity_rewriting,
             &mut labs.vocabulary_biasing,
             &mut labs.mouse_shortcuts,
             &mut labs.unload_idle,
@@ -724,6 +730,7 @@ impl Feature {
             Self::LiveChapters => settings.labs.live_chapters = on,
             Self::MeetingAsk => settings.labs.meeting_ask = on,
             Self::AntigravitySummaries => settings.labs.antigravity_summaries = on,
+            Self::AntigravityRewriting => settings.labs.antigravity_rewriting = on,
             Self::VocabularyBiasing => settings.labs.vocabulary_biasing = on,
             Self::TerminalPaste => settings.paste_with_shift = on,
             Self::KeyboardModelSwitching => settings.keyboard_model_switching.enabled = on,
@@ -933,6 +940,14 @@ pub fn window_dark(labs: &LabsSettings, system_dark: bool) -> bool {
 
 /// Records the switches the loaded or saved settings hold.
 pub(crate) fn apply(settings: &LabsSettings) {
+    ANTIGRAVITY_REWRITING.store(
+        1 + u8::from(
+            settings.antigravity_rewriting
+                && Feature::AntigravityRewriting.shipped()
+                && Feature::AntigravityRewriting.managed().is_none(),
+        ),
+        Ordering::Release,
+    );
     ANTIGRAVITY_SUMMARIES.store(
         1 + u8::from(
             settings.antigravity_summaries
@@ -1198,6 +1213,21 @@ mod tests {
             serde_json::from_value(serde_json::to_value(&settings).unwrap()).unwrap();
         assert!(feature.on(&saved));
         assert_eq!(resolve("meeting-ask", |_| true).unwrap(), feature);
+    }
+
+    #[test]
+    fn antigravity_rewriting_is_everyone_dictation_and_off_by_default() {
+        let feature = Feature::AntigravityRewriting;
+        assert_eq!(feature.audience(), Audience::Everyone);
+        assert_eq!(feature.group(), Group::Dictation);
+        assert!(feature.on_this_os());
+        assert_eq!(feature.settings_key(), "labs.antigravity_rewriting");
+        let mut settings = AppSettings::default();
+        assert!(!feature.on(&settings));
+        feature.set(&mut settings, true);
+        assert!(feature.on(&settings));
+        feature.set(&mut settings, false);
+        assert!(!feature.on(&settings));
     }
 
     #[test]
@@ -1937,4 +1967,20 @@ pub fn antigravity_summaries() -> bool {
         );
     }
     ANTIGRAVITY_SUMMARIES.load(Ordering::Acquire) == 2
+}
+
+static ANTIGRAVITY_REWRITING: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
+pub fn antigravity_rewriting() -> bool {
+    if ANTIGRAVITY_REWRITING.load(Ordering::Acquire) == 0 {
+        let enabled = AppSettings::saved_labs().antigravity_rewriting
+            && Feature::AntigravityRewriting.shipped()
+            && Feature::AntigravityRewriting.managed().is_none();
+        let _ = ANTIGRAVITY_REWRITING.compare_exchange(
+            0,
+            1 + u8::from(enabled),
+            Ordering::AcqRel,
+            Ordering::Acquire,
+        );
+    }
+    ANTIGRAVITY_REWRITING.load(Ordering::Acquire) == 2
 }
