@@ -25,6 +25,7 @@ use crate::desktop::file_dialog::{Dialog, Filter, Pending, Target};
 use crate::desktop::i18n::{tr, tr_fill, tr_named};
 
 mod fixture;
+pub(super) mod questions;
 
 static MORE_ICON: rune::Icon = rune::Icon {
     name: "hex-more",
@@ -195,6 +196,7 @@ fn notes_running_label(ui: &Ui) -> &'static str {
 #[derive(Default)]
 pub(super) struct MeetingsPane {
     pub(super) view: View,
+    pub(super) questions: questions::Questions,
     /// Newest first, as the store lists them.
     pub(super) meetings: Vec<Meeting>,
     error: Option<String>,
@@ -315,6 +317,7 @@ impl MeetingsPane {
 
     pub(super) fn select(&mut self, id: String) {
         if self.selected.as_deref() != Some(id.as_str()) {
+            self.questions.clear();
             self.renaming = None;
             self.delete_armed = None;
             self.action_error = None;
@@ -944,6 +947,7 @@ fn detail(ui: &Ui, p: Paint, meeting: &Meeting, layer: &mut Vec<El>) -> El {
                 .color(p.faint()),
         );
     }
+    body = body.children(questions::panel(ui, p));
     if !meeting.chapters.is_empty() {
         body = body.child(chapters(p, meeting, &copied));
     }

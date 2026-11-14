@@ -47,6 +47,7 @@ pub(crate) use os::{
     system_audio_authorization, system_audio_ready,
 };
 pub(crate) use os::{open_folder, reveal};
+pub(crate) mod ask;
 mod delta;
 mod echo;
 mod export_name;

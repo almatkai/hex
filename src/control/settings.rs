@@ -653,6 +653,23 @@ fn parse(key: &Key, raw: &str, shortcuts: &ShortcutRules) -> Result<Value, Contr
 #[cfg(test)]
 mod tests {
     #[test]
+    fn meeting_ask_lab_is_saved_through_its_settings_key() {
+        let settings = super::apply(
+            &crate::app_settings::AppSettings::default(),
+            "labs.meeting_ask",
+            "true",
+            &rules(),
+        )
+        .unwrap()
+        .settings;
+        assert!(settings.labs.meeting_ask);
+        assert!(!settings.labs.antigravity_summaries);
+        let settings = super::apply(&settings, "labs.meeting_ask", "false", &rules())
+            .unwrap()
+            .settings;
+        assert!(!settings.labs.meeting_ask);
+    }
+    #[test]
     fn antigravity_settings_require_the_lab_and_validate_model_ids() {
         let settings = crate::app_settings::AppSettings::default();
         assert!(super::apply(&settings, "meetings.summaries", "antigravity", &rules()).is_err());

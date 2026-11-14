@@ -75,6 +75,55 @@ fn envelope_is_text_only_and_has_cli_identity() {
     );
 }
 const SSE: &str = "data: {\"response\":{\"candidates\":[{\"content\":{\"parts\":[{\"text\":\"hé\"}]}}]}}\r\n\r\ndata: {\"response\":{\"candidates\":[{\"content\":{\"parts\":[{\"thought\":true,\"text\":\"hidden\"},{\"text\":\"llo\"}]},\"finishReason\":\"STOP\"}]}}\n\ndata: [DONE]\n\n";
+
+#[test]
+fn meeting_ask_uses_the_native_http_envelope_and_public_errors() {
+    let library = crate::meeting::query::Library::new(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/meetings"),
+    );
+    let meeting = library.meeting("1790000000000-1001").unwrap();
+    let (prompt, _) = crate::meeting::ask::prompt(&meeting, "Қандай шешім қабылданды?").unwrap();
+    let (url, server) = fake(200, SSE);
+    let answer = generate_at(
+        &[&url],
+        &credential(),
+        DEFAULT_MODEL,
+        crate::meeting::ask::INSTRUCTIONS,
+        &prompt,
+        Instant::now() + Duration::from_secs(5),
+        &AtomicBool::new(false),
+    )
+    .unwrap();
+    assert_eq!(answer, "héllo");
+    let raw = server.join().unwrap();
+    let body: Value = serde_json::from_str(raw.split_once("\r\n\r\n").unwrap().1).unwrap();
+    assert_eq!(body["request"]["contents"][0]["parts"][0]["text"], prompt);
+    for (status, message) in [
+        (401, "Sign in to Antigravity again"),
+        (429, "Antigravity quota reached. Try again later"),
+        (500, "Antigravity request failed"),
+    ] {
+        // Error statuses are rejected before their body is read; on Windows
+        // sending a split body after that close resets the fixture socket.
+        let (url, server) = fake(status, "");
+        let error = generate_at(
+            &[&url],
+            &credential(),
+            DEFAULT_MODEL,
+            crate::meeting::ask::INSTRUCTIONS,
+            &prompt,
+            Instant::now() + Duration::from_secs(5),
+            &AtomicBool::new(false),
+        )
+        .unwrap_err();
+        assert_eq!(public_error(error).to_string(), message);
+        server.join().unwrap();
+    }
+    assert_eq!(
+        public_error(eyre!("private transcript or token in server error")).to_string(),
+        "Antigravity request failed"
+    );
+}
 #[test]
 fn fake_stream_falls_back_and_parses_split_utf8_sse() {
     let (bad, a) = fake(503, "");

@@ -648,6 +648,7 @@ pub(super) const KEYS: &[Key] = &[
         SUMMARIES,
         "Who titles and summarizes meetings: off, mac (Apple Intelligence), opencode, or antigravity (requires Labs); remote writers receive the transcript",
     ),
+    key("labs.meeting_ask", Kind::Bool, "Labs: Ask meetings"),
     key(
         "labs.antigravity_summaries",
         Kind::Bool,
@@ -656,7 +657,7 @@ pub(super) const KEYS: &[Key] = &[
     key(
         "meetings.antigravity_model",
         Kind::Text,
-        "Antigravity model for meeting summaries",
+        "Antigravity model for meeting summaries and answers",
     ),
     optional(
         "meetings.opencode_model",

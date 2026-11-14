@@ -1863,6 +1863,8 @@ fn platform_goldens() {
             "mac-settings",
             "mac-input-source-models",
             "meetings",
+            "meetings-ask",
+            "meetings-ask-signed-out",
             "meetings-settings",
             "meetings-off",
             "meetings-recording",
@@ -1887,6 +1889,24 @@ fn platform_goldens() {
     check_golden("meetings-delete", false, PANE_SIZE);
     check_golden("meetings-rename", true, PANE_SIZE);
     check_golden("meetings-empty", false, PANE_SIZE);
+}
+
+#[test]
+fn meeting_ask_shows_the_question_and_answer_only_while_its_lab_is_on() {
+    let mut rt = runtime("meetings-ask", false, PANE_SIZE);
+    assert!(rt.find("meeting-question").is_some());
+    assert!(rt.find("meeting-ask-button").is_some());
+    assert!(rt.find("meeting-answer").is_some());
+    rt.update(|ui, _| ui.settings.labs.meeting_ask = false);
+    refresh(&mut rt);
+    assert!(rt.find("meeting-question").is_none());
+    let rt = runtime("meetings-ask-signed-out", false, PANE_SIZE);
+    assert!(rt.find("meeting-question").is_none());
+    assert!(
+        texts(&rt)
+            .iter()
+            .any(|text| text == "Sign in to Antigravity")
+    );
 }
 
 #[test]

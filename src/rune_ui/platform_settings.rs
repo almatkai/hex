@@ -410,7 +410,9 @@ fn summaries_rows(ui: &Ui, p: Paint, layer: &mut Vec<El>) -> Vec<CardRow> {
         Vec::new()
     };
     rows.push(folding("summary-model", model));
-    if ui.settings.labs.antigravity_summaries && chosen == MeetingSummaries::Antigravity {
+    if ui.settings.labs.meeting_ask
+        || (ui.settings.labs.antigravity_summaries && chosen == MeetingSummaries::Antigravity)
+    {
         rows.extend(super::antigravity::rows(ui, p, layer));
     }
     rows

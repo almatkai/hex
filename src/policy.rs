@@ -131,8 +131,10 @@ impl Policy {
         if feature == crate::labs::Feature::AnnotateReplay && self.locks(Lock::Annotate) {
             return Some(Lock::Annotate);
         }
-        if feature == crate::labs::Feature::AntigravitySummaries
-            && self.locks(Lock::OpenCodeProcessing)
+        if matches!(
+            feature,
+            crate::labs::Feature::AntigravitySummaries | crate::labs::Feature::MeetingAsk
+        ) && self.locks(Lock::OpenCodeProcessing)
         {
             return Some(Lock::OpenCodeProcessing);
         }

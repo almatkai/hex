@@ -1260,12 +1260,15 @@ fn poll(ui: &mut Ui, clock: f64, tx: &mut Tx) -> bool {
     let now = Instant::now();
     let mut changed = ui.save_drafts(now);
     changed |= paste_access::poll(ui);
+    changed |= meetings::questions::poll(ui);
     changed |= ui.antigravity.poll(
         ui.live()
             && !ui.labs_open
             && ui.pane == Pane::Meetings
-            && ui.settings.labs.antigravity_summaries
-            && ui.settings.meetings.summaries == crate::app_settings::MeetingSummaries::Antigravity
+            && (ui.settings.labs.meeting_ask
+                || (ui.settings.labs.antigravity_summaries
+                    && ui.settings.meetings.summaries
+                        == crate::app_settings::MeetingSummaries::Antigravity))
             && ui.window.as_ref().is_some_and(rune::AppHandle::is_visible),
     );
     // The OpenCode catalog is read only while a pane that uses it shows:

@@ -326,6 +326,12 @@ fn rows(ui: &Ui) -> Vec<Row> {
     };
     let mut rows = Vec::new();
     rows.push(row(
+        Feature::MeetingAsk,
+        None,
+        tr("Ask meetings"),
+        tr("Ask questions about a meeting with Antigravity; sends transcript excerpts to Google"),
+    ));
+    rows.push(row(
         Feature::AntigravitySummaries,
         None,
         tr("Antigravity summaries"),
@@ -906,6 +912,7 @@ fn row_key(lab: Lab) -> &'static str {
         Feature::FailureNotices => "lab-failure-notices",
         Feature::LiveTyping => "lab-live-typing",
         Feature::LiveChapters => "lab-live-chapters",
+        Feature::MeetingAsk => "lab-meeting-ask",
         Feature::AntigravitySummaries => "lab-antigravity-summaries",
         Feature::VocabularyBiasing => "lab-vocabulary-biasing",
         Feature::TerminalPaste => "lab-terminal-paste",

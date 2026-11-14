@@ -99,6 +99,7 @@ impl Feature {
             | Self::FailureNotices
             | Self::LiveTyping
             | Self::AntigravitySummaries
+            | Self::MeetingAsk
             | Self::LiveChapters
             | Self::VocabularyBiasing
             | Self::TerminalPaste
@@ -172,6 +173,7 @@ impl Feature {
     /// The day it joined Labs, as `yyyymmdd`. Labs marks the newest as New.
     pub const fn added(self) -> u32 {
         match self {
+            Self::MeetingAsk => 20261115,
             Self::AntigravitySummaries => 20261113,
             Self::Meetings
             | Self::VoiceFilter
@@ -281,7 +283,7 @@ impl Feature {
     /// Whether this OS has the feature at all, in any build.
     pub fn on_this_os(self) -> bool {
         match self {
-            Self::AntigravitySummaries => true,
+            Self::AntigravitySummaries | Self::MeetingAsk => true,
             Self::Meetings
             | Self::LiveChapters
             | Self::SubtitleExport
@@ -377,6 +379,7 @@ impl Feature {
             Self::FailureNotices => "failure-notices",
             Self::LiveTyping => "live-typing",
             Self::LiveChapters => "live-chapters",
+            Self::MeetingAsk => "meeting-ask",
             Self::AntigravitySummaries => "antigravity-summaries",
             Self::VocabularyBiasing => "vocabulary-biasing",
             Self::TerminalPaste => "terminal-paste",
@@ -457,6 +460,7 @@ impl Feature {
             Self::FailureNotices => "labs.failure_notices",
             Self::LiveTyping => "labs.live_typing",
             Self::LiveChapters => "labs.live_chapters",
+            Self::MeetingAsk => "labs.meeting_ask",
             Self::AntigravitySummaries => "labs.antigravity_summaries",
             Self::VocabularyBiasing => "labs.vocabulary_biasing",
             Self::TerminalPaste => "paste_with_shift",
@@ -541,6 +545,7 @@ impl Feature {
             Self::FailureNotices => settings.labs.failure_notices,
             Self::LiveTyping => settings.labs.live_typing,
             Self::LiveChapters => settings.labs.live_chapters,
+            Self::MeetingAsk => settings.labs.meeting_ask,
             Self::AntigravitySummaries => settings.labs.antigravity_summaries,
             Self::VocabularyBiasing => settings.labs.vocabulary_biasing,
             Self::TerminalPaste => settings.paste_with_shift,
@@ -628,6 +633,7 @@ impl Feature {
             &mut labs.live_typing,
             &mut labs.live_chapters,
             &mut labs.antigravity_summaries,
+            &mut labs.meeting_ask,
             &mut labs.vocabulary_biasing,
             &mut labs.mouse_shortcuts,
             &mut labs.unload_idle,
@@ -707,6 +713,7 @@ impl Feature {
             Self::FailureNotices => settings.labs.failure_notices = on,
             Self::LiveTyping => settings.labs.live_typing = on,
             Self::LiveChapters => settings.labs.live_chapters = on,
+            Self::MeetingAsk => settings.labs.meeting_ask = on,
             Self::AntigravitySummaries => settings.labs.antigravity_summaries = on,
             Self::VocabularyBiasing => settings.labs.vocabulary_biasing = on,
             Self::TerminalPaste => settings.paste_with_shift = on,
@@ -1166,6 +1173,22 @@ pub fn log_launch() {
 mod tests {
     use super::cli::resolve;
     use super::*;
+
+    #[test]
+    fn meeting_ask_is_an_everyone_meetings_lab_off_by_default() {
+        let feature = Feature::MeetingAsk;
+        let mut settings = AppSettings::default();
+        assert_eq!(feature.audience(), Audience::Everyone);
+        assert_eq!(feature.group(), Group::Meetings);
+        assert_eq!(feature.settings_key(), "labs.meeting_ask");
+        assert!(feature.on_this_os());
+        assert!(!feature.on(&settings));
+        feature.set(&mut settings, true);
+        let saved: AppSettings =
+            serde_json::from_value(serde_json::to_value(&settings).unwrap()).unwrap();
+        assert!(feature.on(&saved));
+        assert_eq!(resolve("meeting-ask", |_| true).unwrap(), feature);
+    }
 
     #[test]
     fn antigravity_summaries_are_off_by_default_and_available_to_everyone() {

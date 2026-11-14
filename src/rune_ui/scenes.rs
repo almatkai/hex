@@ -538,6 +538,21 @@ pub(super) const SCENES: &[Scene] = &[
         *ui = mac_fixture();
         ui.pane = Pane::Meetings;
     }),
+    ("meetings-ask", |ui| {
+        *ui = mac_fixture();
+        ui.pane = Pane::Meetings;
+        ui.settings.meetings.enabled = true;
+        ui.settings.labs.meeting_ask = true;
+        ui.antigravity = antigravity::Account::fixture(true);
+        ui.meetings.questions = meetings::questions::Questions::fixture();
+    }),
+    ("meetings-ask-signed-out", |ui| {
+        *ui = mac_fixture();
+        ui.pane = Pane::Meetings;
+        ui.settings.meetings.enabled = true;
+        ui.settings.labs.meeting_ask = true;
+        ui.antigravity = antigravity::Account::fixture(false);
+    }),
     ("meetings-settings", |ui| {
         *ui = mac_fixture();
         ui.meetings.view = meetings::View::Settings;

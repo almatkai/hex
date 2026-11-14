@@ -1658,6 +1658,8 @@ mod tests {
         include_str!("../rune_ui/macos_host.rs"),
         include_str!("../rune_ui/meeting_capsules.rs"),
         include_str!("../rune_ui/meetings.rs"),
+        include_str!("../rune_ui/meetings/questions.rs"),
+        include_str!("../meeting/ask.rs"),
         include_str!("../rune_ui/models.rs"),
         include_str!("../rune_ui/found.rs"),
         include_str!("../rune_ui/found_choice.rs"),

@@ -24,6 +24,14 @@ code, and can be captured like any other (`docs/windows.md`).
 
 The read-only `hex history` and `hex meetings list|show|chapters|search` commands, and
 `hex mcp`, read files rather than the running Hex; see `docs/transcript-cli.md`.
+`hex meetings ask <selector> "<question>" [--json]` also runs locally with
+read-only meeting access. It requires Meetings, Labs > Ask meetings
+(`labs.meeting_ask`, off by default), and Google Antigravity sign-in. An explicit
+Ask sends bounded transcript excerpts and notes to Google, using
+`meetings.antigravity_model`; it does not save the answer. Sign in through
+Meetings > Settings or `hex antigravity login` (Ask meetings or Antigravity
+summaries must be on). See `docs/transcript-cli.md` for its version 1 JSON reply,
+deadline, missing-evidence behavior, and lexical retrieval limits.
 
 ## Commands
 
@@ -43,7 +51,8 @@ hex
 │   ├── record [--title T]         as the menu bar's Record Meeting; needs meetings.enabled
 │   ├── stop                       Stop & Transcribe
 │   ├── copy-last                  copy the last meeting transcript to the clipboard
-│   └── list | show | search       read-only (docs/transcript-cli.md)
+│   ├── list | show | search       read-only (docs/transcript-cli.md)
+│   └── ask <selector> "<question>" [--json]  Labs > Ask meetings; local Antigravity answer
 ├── settings
 │   ├── list                       every setting: key, value, kind, choices, writable, about
 │   ├── get <key|prefix>           one setting, or every key under a prefix (`meetings`)

@@ -8,10 +8,14 @@ pub enum AntigravityAction {
 
 pub(super) fn run(action: AntigravityAction) -> u8 {
     let result = match action {
-        AntigravityAction::Login if !crate::labs::antigravity_summaries() => {
+        AntigravityAction::Login
+            if !crate::labs::antigravity_summaries()
+                && !crate::labs::Feature::MeetingAsk
+                    .saved_on(&crate::app_settings::AppSettings::read().unwrap_or_default()) =>
+        {
             Err(color_eyre::eyre::eyre!(
                 "{}",
-                crate::desktop::i18n::tr("Turn on Antigravity summaries in Labs")
+                crate::desktop::i18n::tr("Turn on Ask meetings or Antigravity summaries in Labs")
             ))
         }
         AntigravityAction::Login => {

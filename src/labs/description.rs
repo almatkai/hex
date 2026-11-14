@@ -18,6 +18,9 @@ impl Feature {
             Self::LiveTyping => {
                 "Show provisional words in the focused text field while dictating on Wayland, then type the final text there"
             }
+            Self::MeetingAsk => {
+                "Ask questions about a meeting with Antigravity; sends transcript excerpts to Google"
+            }
             Self::AntigravitySummaries => {
                 "Write meeting summaries with your Google Antigravity account"
             }
