@@ -1,4 +1,7 @@
 /target
+# Build-time secrets (build.rs reads secrets/antigravity-client-secret.txt).
+/secrets/*
+!/secrets/.gitkeep
 /.venv
 /logs
 /perf/transcription-corpus

@@ -5,6 +5,7 @@ fn main() {
     check_windows_split();
     build_version();
     test_build_commit();
+    antigravity_client_secret();
     // `hex_dev_onboarding`: the first run's replay strip and its swearing
     // jokes, in debug and `HEX_TEST_BUILD=1` builds only.
     println!("cargo::rustc-check-cfg=cfg(hex_dev_onboarding)");
@@ -205,6 +206,24 @@ fn test_build_commit() {
         {
             println!("cargo:rerun-if-changed={path}");
         }
+    }
+}
+
+/// Bakes the Antigravity desktop client's secret into this build
+/// (`HEX_ANTIGRAVITY_CLIENT_SECRET`) from `ANTIGRAVITY_CLIENT_SECRET` or
+/// `secrets/antigravity-client-secret.txt`, whose folder git ignores, so a
+/// built Hex signs in without a per-computer file. Without either, the build
+/// has none and Hex reads it at run time as before.
+fn antigravity_client_secret() {
+    println!("cargo:rerun-if-env-changed=ANTIGRAVITY_CLIENT_SECRET");
+    println!("cargo:rerun-if-changed=secrets");
+    let secret = std::env::var("ANTIGRAVITY_CLIENT_SECRET")
+        .ok()
+        .or_else(|| std::fs::read_to_string("secrets/antigravity-client-secret.txt").ok())
+        .map(|secret| secret.trim().to_owned())
+        .filter(|secret| !secret.is_empty() && !secret.contains(['\n', '\r']));
+    if let Some(secret) = secret {
+        println!("cargo:rustc-env=HEX_ANTIGRAVITY_CLIENT_SECRET={secret}");
     }
 }
 

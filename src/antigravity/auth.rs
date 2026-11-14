@@ -7,8 +7,9 @@ const TOKEN: &str = "https://oauth2.googleapis.com/token";
 const ID: &str = "1071006060591-tmhssin2h21lcre235vtolojh4g403ep.apps.googleusercontent.com";
 /// The desktop client's secret is kept out of the repository: it comes from
 /// `ANTIGRAVITY_CLIENT_SECRET`, else `antigravity-client-secret.txt` in Hex's
-/// data folder, filled in once per computer.
+/// data folder, else the one the build baked in (`build.rs`).
 pub(super) const SECRET_FILE: &str = "antigravity-client-secret.txt";
+const BUILT_SECRET: Option<&str> = option_env!("HEX_ANTIGRAVITY_CLIENT_SECRET");
 pub(super) fn secret() -> Result<String> {
     if let Ok(value) = std::env::var("ANTIGRAVITY_CLIENT_SECRET")
         && !value.trim().is_empty()
@@ -22,6 +23,7 @@ pub(super) fn secret() -> Result<String> {
         .ok()
         .filter(|_| !text.trim().is_empty())
         .map(|_| text.trim().to_owned())
+        .or_else(|| BUILT_SECRET.map(str::to_owned))
         .ok_or_else(|| eyre!("Antigravity client secret missing"))
 }
 const SCOPES: &[&str] = &[

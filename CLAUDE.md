@@ -16,5 +16,5 @@
 - **Labs Gate**: New or experimental features belong behind Labs flags, off by default.
 - **Build Commands**:
   - **Windows**: `cargo build --release --bin hex`
-  - **macOS**: `./scripts/setup.sh` followed by `HEX_TEST_BUILD=1 ./scripts/build-app.sh` (or `cargo build --release --bin hex`)
+  - **macOS**: `./scripts/setup.sh` followed by `HEX_RELEASE_UNSIGNED=1 HEX_LOCAL_BUILD=1 ./scripts/build-app.sh` (the real `Hex.app`, `anomaly.hex`, data in `~/Library/Application Support/hex`, ad-hoc signed, updates off). `HEX_TEST_BUILD=1` makes `Hex Test.app` with its own `hex-test` data folder; use it only when a separate test app is wanted.
   - **Linux**: `cargo build --release --bin hex`
