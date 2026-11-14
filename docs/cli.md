@@ -599,9 +599,12 @@ The Antigravity desktop client's OAuth secret is not in the repository. Hex
 reads it from `ANTIGRAVITY_CLIENT_SECRET`, else from
 `antigravity-client-secret.txt` in Hex's data folder (`%APPDATA%\hex` on
 Windows, `~/Library/Application Support/hex` on macOS, `~/.local/share/hex` on
-Linux); put it there once per computer. Without it, login fails with
-"Antigravity client secret missing" before the browser opens, and status says
-so.
+Linux; a test build's is `hex-test`), else from the one baked into the build.
+A build bakes it in when `ANTIGRAVITY_CLIENT_SECRET` is set while it compiles
+or `secrets/antigravity-client-secret.txt` exists in the checkout (git ignores
+that folder), so a built Hex needs no file per computer. Without any of them,
+login fails with "Antigravity client secret missing" before the browser opens,
+and both the window and status say so.
 
 The account commands run locally without a running Hex. Login opens Google in
 the browser and accepts a state-checked PKCE callback on 127.0.0.1:51121 (redirect

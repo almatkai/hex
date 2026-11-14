@@ -14,7 +14,8 @@ use std::time::{Duration, Instant};
 struct Snapshot {
     email: Option<String>,
     models: Vec<String>,
-    failed: bool,
+    /// Why the last sign-in or sign-out failed, already translated.
+    error: Option<String>,
 }
 
 #[derive(Default)]
@@ -42,7 +43,7 @@ impl Account {
                 } else {
                     Vec::new()
                 },
-                failed: false,
+                error: None,
             },
             receiver: None,
             cancel: Arc::new(AtomicBool::new(false)),
@@ -74,12 +75,16 @@ impl Account {
         self.signing = account_action;
         self.read_at = Some(Instant::now());
         std::thread::spawn(move || {
-            let failed = account_action
-                && if signed_in {
-                    crate::antigravity::logout().is_err()
-                } else {
-                    crate::antigravity::login(&cancel, None).is_err()
-                };
+            let error = account_action
+                .then(|| {
+                    if signed_in {
+                        crate::antigravity::logout()
+                    } else {
+                        crate::antigravity::login(&cancel, None)
+                    }
+                })
+                .and_then(|result| result.err())
+                .map(|error| error.to_string());
             let email = crate::antigravity::email();
             let models = if email.is_some() && (email != old_email || old_models.is_empty()) {
                 crate::antigravity::models(&cancel).unwrap_or_default()
@@ -91,7 +96,7 @@ impl Account {
             let _ = tx.send(Snapshot {
                 email,
                 models,
-                failed,
+                error,
             });
         });
     }
@@ -111,7 +116,7 @@ impl Account {
                 Err(mpsc::TryRecvError::Disconnected) => {
                     self.receiver = None;
                     self.signing = false;
-                    self.snapshot.failed = true;
+                    self.snapshot.error = Some(tr("Antigravity sign-in failed. Try again").into());
                     return true;
                 }
                 Err(mpsc::TryRecvError::Empty) => return false,
@@ -154,15 +159,12 @@ pub(super) fn rows(ui: &Ui, p: Paint, layer: &mut Vec<El>) -> Vec<CardRow> {
             }
         },
     );
-    let description = if account.snapshot.failed {
-        tr("Antigravity sign-in failed. Try again")
-    } else {
-        account
-            .snapshot
-            .email
-            .as_deref()
-            .unwrap_or(tr("Sign in to Antigravity"))
-    };
+    let description = account
+        .snapshot
+        .error
+        .as_deref()
+        .or(account.snapshot.email.as_deref())
+        .unwrap_or(tr("Sign in to Antigravity"));
     let mut rows = vec![
         controls::setting_row(
             p,
