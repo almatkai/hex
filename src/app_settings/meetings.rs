@@ -507,6 +507,10 @@ pub fn meeting_output_folder() -> PathBuf {
         .unwrap_or_else(default_meeting_output_folder)
 }
 
+fn default_antigravity_model() -> String {
+    crate::antigravity::DEFAULT_MODEL.into()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -546,8 +550,4 @@ mod tests {
         );
         assert_eq!(MeetingSettings::default().audio_retention, None);
     }
-}
-
-fn default_antigravity_model() -> String {
-    crate::antigravity::DEFAULT_MODEL.into()
 }

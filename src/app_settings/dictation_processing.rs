@@ -46,11 +46,52 @@ pub struct DictationMode {
     pub vocabulary: Vec<VocabularyEntry>,
 }
 
-/// Persisted OpenCode rewrite settings for one mode.
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RewriteProvider {
+    #[default]
+    #[serde(rename = "opencode")]
+    OpenCode,
+    Antigravity,
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RewriteStyle {
+    #[default]
+    Custom,
+    Punctuate,
+    Translate,
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RewriteLanguage {
+    #[default]
+    English,
+    Russian,
+    Kazakh,
+}
+
+impl RewriteLanguage {
+    pub const fn name(self) -> &'static str {
+        match self {
+            Self::English => "English",
+            Self::Russian => "Russian",
+            Self::Kazakh => "Kazakh",
+        }
+    }
+}
+
+/// Persisted rewrite settings for one mode. Old settings keep OpenCode.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(default)]
 pub struct DictationPostProcessing {
     pub enabled: bool,
+    pub provider: RewriteProvider,
+    pub antigravity_model: String,
+    pub style: RewriteStyle,
+    pub target_language: RewriteLanguage,
     pub prompt: String,
     /// Optional `provider/model` key from the OpenCode catalog.
     pub model: Option<String>,
@@ -62,6 +103,10 @@ impl Default for DictationPostProcessing {
     fn default() -> Self {
         Self {
             enabled: false,
+            provider: RewriteProvider::default(),
+            antigravity_model: crate::antigravity::DEFAULT_MODEL.into(),
+            style: RewriteStyle::default(),
+            target_language: RewriteLanguage::default(),
             prompt: "Rewrite the transcript into clear, natural text while preserving the speaker's intended meaning.".into(),
             model: None,
             variant: None,

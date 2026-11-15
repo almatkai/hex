@@ -1,5 +1,5 @@
 //! The Modes pane: the Global mode and custom modes chosen by the frontmost
-//! application, each with corrections, optional OpenCode rewriting, and
+//! application, each with corrections, optional OpenCode or Antigravity rewriting, and
 //! transformations, built in or from the user's config. Text fields are drafts saved when
 //! typing pauses; every other edit saves at once and asks the service to
 //! reload.
@@ -33,6 +33,7 @@ use crate::dictation::text_replacements::TextReplacement;
 use crate::personal_commands::{HostState, StatusSnapshot, StatusTransformation};
 use transformations::transformations;
 
+mod rewriting;
 mod transformations;
 
 const LIST_WIDTH: f32 = 240.0;
@@ -1140,7 +1141,20 @@ fn processing(
         return section(p, "processing", tr("Processing"), vec![row]);
     }
     let enabled = current.post_processing.enabled;
-    let can_toggle = enabled || ui.models.available();
+    let antigravity =
+        current.post_processing.provider == crate::app_settings::RewriteProvider::Antigravity;
+    let lab = ui.settings.labs.antigravity_rewriting;
+    let label = if lab || antigravity {
+        tr("Rewrite dictation")
+    } else {
+        tr("OpenCode transformation")
+    };
+    let can_toggle = enabled
+        || if antigravity {
+            lab
+        } else {
+            ui.models.available()
+        };
     let toggle = Switch::new(enabled)
         .disabled(!can_toggle)
         .on_toggle(|ui: &mut Ui| {
@@ -1151,19 +1165,19 @@ fn processing(
         })
         .build(p.k)
         .key("processing-toggle")
-        .label(tr("OpenCode transformation"));
-    let reason = (!can_toggle)
+        .label(label);
+    let reason = (!can_toggle && !antigravity)
         .then(|| models::unavailable_reason(ui, OpenCodeFeature::Transformation))
         .flatten();
-    let mut rows = vec![setting_row(
-        p,
-        "processing-enabled",
-        tr("OpenCode transformation"),
-        reason,
-        toggle,
-    )];
+    let mut rows = rewriting::provider_rows(ui, p, current, layer);
+    rows.push(setting_row(p, "processing-enabled", label, reason, toggle));
     if enabled {
-        rows.extend(models::rows(ui, p, Target::Mode(selection), layer));
+        rows.extend(rewriting::profile_rows(ui, p, current, layer));
+        if antigravity && lab {
+            rows.extend(rewriting::antigravity_rows(ui, p, current, layer));
+        } else if !antigravity {
+            rows.extend(models::rows(ui, p, Target::Mode(selection), layer));
+        }
         rows.push(setting_row(
             p,
             "deadline",
@@ -1177,38 +1191,46 @@ fn processing(
                 .build(p.k)
                 .key("deadline-field"),
         ));
-        rows.push(
-            col()
-                .key("instructions")
-                .px(METRICS.row_px)
-                .py(8.0)
-                .gap(6.0)
-                .child(
-                    text(tr("Instructions"))
-                        .key("title")
-                        .font(p.k.ty.ui)
-                        .color(p.text()),
-                )
-                .child(
-                    text(tr(
-                        "System instructions for rewriting dictation in this mode",
-                    ))
-                    .key("description")
-                    .font(DESCRIPTION)
-                    .color(p.muted()),
-                )
-                .child(
-                    TextArea::new(&ui.modes.editor.prompt)
-                        .placeholder(tr("Describe how OpenCode should rewrite your dictation…"))
-                        .rows(4)
-                        .width(None)
-                        .on_edit(|ui: &mut Ui| &mut ui.modes.editor.prompt)
-                        .build(p.k)
-                        .key("prompt"),
-                ),
-        );
+        if current.post_processing.style == crate::app_settings::RewriteStyle::Custom {
+            rows.push(
+                col()
+                    .key("instructions")
+                    .px(METRICS.row_px)
+                    .py(8.0)
+                    .gap(6.0)
+                    .child(
+                        text(tr("Instructions"))
+                            .key("title")
+                            .font(p.k.ty.ui)
+                            .color(p.text()),
+                    )
+                    .child(
+                        text(tr(
+                            "System instructions for rewriting dictation in this mode",
+                        ))
+                        .key("description")
+                        .font(DESCRIPTION)
+                        .color(p.muted()),
+                    )
+                    .child(
+                        TextArea::new(&ui.modes.editor.prompt)
+                            .placeholder(if antigravity {
+                                tr("Instructions")
+                            } else {
+                                tr("Describe how OpenCode should rewrite your dictation…")
+                            })
+                            .rows(4)
+                            .width(None)
+                            .on_edit(|ui: &mut Ui| &mut ui.modes.editor.prompt)
+                            .build(p.k)
+                            .key("prompt"),
+                    ),
+            );
+        }
     }
-    if let Some(notice) = models::unavailable(ui, p, OpenCodeFeature::Transformation) {
+    if !antigravity
+        && let Some(notice) = models::unavailable(ui, p, OpenCodeFeature::Transformation)
+    {
         rows.push(notice);
     }
     section(p, "processing", tr("Processing"), rows)
@@ -1317,6 +1339,21 @@ fn fixture_icon(rgb: [u8; 3]) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::reorder_transformation;
+
+    #[test]
+    fn antigravity_rewriting_exposes_modes_only_with_its_lab() {
+        let mut ui = crate::rune_ui::scenes::portal_fixture();
+        let pane = crate::rune_ui::Pane::Modes;
+        assert!(!pane.shown(&ui));
+        assert!(!crate::rune_ui::labs::main_panes(&ui).contains(&pane));
+        ui.settings.labs.antigravity_rewriting = true;
+        assert!(pane.shown(&ui));
+        assert!(crate::rune_ui::labs::main_panes(&ui).contains(&pane));
+        ui.pane = pane;
+        ui.update(|settings| settings.labs.antigravity_rewriting = false);
+        assert!(!pane.shown(&ui));
+        assert_eq!(ui.pane, crate::rune_ui::Pane::Output);
+    }
 
     #[test]
     fn transformations_reorder_in_both_directions() {

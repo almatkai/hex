@@ -50,6 +50,13 @@ impl Processing {
         }
     }
 
+    pub(super) fn with_gate(&self, enabled: fn() -> bool) -> Self {
+        Self {
+            enabled,
+            ..self.clone()
+        }
+    }
+
     /// A processor under another gate, so route tests need no global Labs
     /// state.
     #[cfg(test)]

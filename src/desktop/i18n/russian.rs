@@ -15,12 +15,17 @@ pub(super) fn table() -> &'static HashMap<&'static str, &'static str> {
             .iter()
             .copied()
             .chain(super::antigravity::extra(2))
+            .chain(super::remote::extra(2))
             .collect()
     })
 }
 
 #[rustfmt::skip]
 const TRANSLATIONS: &[(&str, &str)] = &[
+    ("Pick a model to download, or use one already on this computer.", "Выберите модель для загрузки или используйте уже имеющуюся на этом компьютере."),
+    ("25 European languages", "25 европейских языков"),
+    ("Russian, with punctuation", "Русский, с пунктуацией"),
+    ("Multilingual", "Многоязычная"),
 
     ("Hex picks a fast model", "Hex выбирает быструю модель"),
     ("Follow live transcript", "Следить за расшифровкой в реальном времени"),

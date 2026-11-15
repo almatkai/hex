@@ -13,6 +13,8 @@ pub enum Feature {
     LiveTyping,
     LiveChapters,
     AntigravitySummaries,
+    MeetingAsk,
+    AntigravityRewriting,
     VocabularyBiasing,
     TerminalPaste,
     KeyboardModelSwitching,
@@ -74,6 +76,7 @@ pub enum Feature {
     CapsLockDictation,
     OpenCodeInWsl,
     TranscribeFiles,
+    RemoteDictation,
     ApiProcessing,
     ApiTimestamps,
     SpeakersOnly,
@@ -82,7 +85,7 @@ pub enum Feature {
 }
 
 impl Feature {
-    pub const ALL: [Self; 74] = [
+    pub const ALL: [Self; 77] = [
         Self::Meetings,
         Self::VoiceFilter,
         Self::Playground,
@@ -91,6 +94,8 @@ impl Feature {
         Self::LiveTyping,
         Self::LiveChapters,
         Self::AntigravitySummaries,
+        Self::MeetingAsk,
+        Self::AntigravityRewriting,
         Self::VocabularyBiasing,
         Self::TerminalPaste,
         Self::KeyboardModelSwitching,
@@ -152,6 +157,7 @@ impl Feature {
         Self::CapsLockDictation,
         Self::OpenCodeInWsl,
         Self::TranscribeFiles,
+        Self::RemoteDictation,
         Self::ApiProcessing,
         Self::ApiTimestamps,
         Self::SpeakersOnly,

@@ -69,6 +69,8 @@ pub struct LabsSettings {
     pub live_typing: bool,
     pub live_chapters: bool,
     pub antigravity_summaries: bool,
+    pub meeting_ask: bool,
+    pub antigravity_rewriting: bool,
     pub playground: bool,
     /// Parakeet transcription biased toward the vocabulary.
     pub vocabulary_biasing: bool,
@@ -232,6 +234,8 @@ impl Default for LabsSettings {
             live_typing: false,
             live_chapters: false,
             antigravity_summaries: false,
+            meeting_ask: false,
+            antigravity_rewriting: false,
             playground: false,
             vocabulary_biasing: false,
             mouse_shortcuts: false,

@@ -51,7 +51,9 @@ impl Feature {
     /// The group Labs lists it under. Every feature picks one.
     pub const fn group(self) -> Group {
         match self {
-            Self::LiveText
+            Self::RemoteDictation
+            | Self::AntigravityRewriting
+            | Self::LiveText
             | Self::FailureNotices
             | Self::LiveTyping
             | Self::NotchIndicator
@@ -86,6 +88,7 @@ impl Feature {
             | Self::RecentDictations => Group::History,
             Self::Meetings
             | Self::AntigravitySummaries
+            | Self::MeetingAsk
             | Self::LiveChapters
             | Self::SubtitleExport
             | Self::StopWhenCallEnds

@@ -5,6 +5,39 @@ use std::path::PathBuf;
 
 const NOW: u64 = 1_792_700_000_000;
 
+#[test]
+fn meeting_ask_cli_parses_and_serializes_a_versioned_answer() {
+    let cli =
+        Cli::try_parse_from(["hex", "meetings", "ask", "latest", "Что решили?", "--json"]).unwrap();
+    let Some(ControlCli::Meetings {
+        command: MeetingsCommand::Ask { id, question, json },
+    }) = cli.command
+    else {
+        panic!("expected meetings ask");
+    };
+    assert_eq!(id, "latest");
+    assert_eq!(question, "Что решили?");
+    assert!(json);
+    let library =
+        Library::new(Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/meetings"));
+    let meeting = resolve(&library, "latest").unwrap();
+    let output = crate::meeting::ask::Answer {
+        version: 1,
+        meeting_id: meeting.id.clone(),
+        answer: "Решение [01:20]".into(),
+        model: crate::antigravity::DEFAULT_MODEL.into(),
+        excerpted: true,
+    };
+    let mut bytes = Vec::new();
+    write_json(&mut bytes, &output).unwrap();
+    let value: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert_eq!(
+        value,
+        serde_json::json!({ "version": 1, "meeting_id": meeting.id, "answer": "Решение [01:20]", "model": crate::antigravity::DEFAULT_MODEL, "excerpted": true })
+    );
+    assert!(value.get("transcript").is_none());
+}
+
 /// The shared command tree every OS's `hex` flattens.
 #[derive(Parser)]
 struct Cli {

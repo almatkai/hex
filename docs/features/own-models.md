@@ -136,17 +136,20 @@ API's `/models` and the SDK's `ModelInfo.source` carry the same field.
 ## Onboarding Choice
 
 ```ts
-Onboarding opens -> scan; its own download waits until it answers  // setup.found-choice
-├── Nothing compatible found -> Setting up Hex, unchanged: the recommended
-│   model downloads by itself, and the model step never shows
-└── Something found -> the first run's model step in place of Setting up Hex:
+Onboarding opens -> scan; no download before a pick or Continue  // setup.found-choice
+└── Always show the first run's model step, even with an empty cache:
     "Choose a speech model", one card of radio rows, no buttons inside
     ├── Hex's recommended model first, selected, [Recommended] -> "731 MB
     │   download", or "On this computer" when its exact file (same SHA-256) is
     │   in the cache (one row, never two)
+    ├── Then GigaAM Multilingual (ru/kk/ky/uz/en), GigaAM v3 (ru, punctuated),
+    │   Whisper Large v3 Turbo (multilingual), and Parakeet Unified English
+    │   and v3; each has its catalog name, size and languages. The recommendation
+    │   appears only once. Settings › General's model picker is unchanged
     ├── Then each found file -> its name, "On this computer" (a catalog model)
     │   or "On this computer · not tested by Hex"; no hashes, repositories,
-    │   revisions, or compression
+    │   revisions, or compression. A found catalog file already listed above
+    │   shares that row, marked "On this computer", instead of appearing twice
     ├── Picking a row starts it: ours downloads ("Downloading… 42%" on the row)
     │   or, already here, is checked in place; a found file is used where it
     │   is ("Checking…"). A later pick supersedes one still preparing
@@ -156,8 +159,9 @@ Onboarding opens -> scan; its own download waits until it answers  // setup.foun
     ├── A pick that fails asks again on the list
     ├── Back on the pages after it returns to the list to change the pick,
     │   even with the model ready
-    └── The held download is released once the tour passes setup, so a run
-        that skips the step still gets the recommended model
+    └── The tour's own download stays held until a pick or Continue, even
+        after setup. Retry, file import, and Continue without a model keep
+        their existing failure/stall and permission requirements
 ```
 
 Observed on apollo (Linux, Radeon 8060S over Vulkan, 2026-11-01) with an
@@ -181,6 +185,11 @@ downloaded, the full check refusing a mismatched file),
 `desktop::onboarding::tests::a_held_download_waits_for_the_person`,
 `a_found_model_moves_on_without_a_download_and_back_returns_to_it`,
 `the_onboarding_model_list_starts_the_row_picked_or_the_recommended_one`,
+`rune_ui::onboarding::tests::onboarding_always_shows_the_model_choice_without_downloading`,
+`onboarding_continue_downloads_only_the_preselected_recommendation`,
+`onboarding_downloads_the_catalog_row_picked_and_tracks_its_progress`,
+`onboarding_found_catalog_files_share_the_catalog_row`,
+`onboarding_never_releases_an_unpicked_download_after_setup`,
 `labs::tests::graduated_features_answer_by_name`, and the goldens
 `rune-picker-custom-models-light`, `rune-picker-found-light`, and
 `rune-onboarding-model-found-light`,

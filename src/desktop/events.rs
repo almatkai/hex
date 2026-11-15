@@ -67,6 +67,14 @@ pub enum VoiceEvent {
         method: String,
         path: String,
     },
+    /// Phone request metadata only; never audio, text or credentials.
+    RemoteRequest {
+        timestamp_ms: u64,
+        device: String,
+        operation: String,
+        duration_ms: u64,
+        outcome: String,
+    },
 }
 
 impl VoiceEvent {
@@ -80,6 +88,7 @@ impl VoiceEvent {
             | Self::Context { timestamp_ms, .. }
             | Self::ApiServerStarted { timestamp_ms, .. }
             | Self::ApiServerStopped { timestamp_ms }
+            | Self::RemoteRequest { timestamp_ms, .. }
             | Self::ApiAuthFailed { timestamp_ms, .. } => *timestamp_ms,
         }
     }
@@ -95,6 +104,7 @@ impl VoiceEvent {
             Self::ApiServerStarted { .. } => "api_server_started",
             Self::ApiServerStopped { .. } => "api_server_stopped",
             Self::ApiAuthFailed { .. } => "api_auth_failed",
+            Self::RemoteRequest { .. } => "remote_request",
         }
     }
 }

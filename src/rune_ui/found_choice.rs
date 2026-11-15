@@ -1,32 +1,20 @@
-//! Onboarding's speech model list, shown only when the hub-cache scan found
-//! a compatible model (`found_models`): the first run's model step
-//! (`onboarding_kit::live`) shows one card of selectable rows, Hex's
-//! recommended model first and selected, then the models already on this
-//! computer. Picking a row starts it at once: ours downloads (or, when its
-//! exact file is already here, is used in place), and a found model is used
-//! where it is. Continue starts the selected row when none was picked.
-//! Without a found model the step is exactly as before.
+//! Onboarding always offers a speech model choice: the language's
+//! recommendation first, then a small catalog list and files found here.
+//! A pick or Continue starts preparation; merely showing the list never
+//! downloads anything. Found files are checked and used in place.
 
 use super::Ui;
 use crate::desktop::i18n::{tr, tr_fill};
 use crate::desktop::onboarding::{Input, ItemStatus, SetupItem};
 use crate::transcription::found_models::Found;
-use crate::transcription::models::{self as transcription_models, TranscriptionSelection};
-
-/// Whether onboarding shows the list: something compatible was found and
-/// the model isn't ready yet, or the person picked from it (it stays, so a
-/// ready pick moves on from the list and Back returns to it).
-pub(super) fn offered(ui: &Ui, model: ItemStatus) -> bool {
-    !ui.found.models.is_empty() && (model != ItemStatus::Ready || ui.found.picked.is_some())
-}
+use crate::transcription::models::{
+    self as transcription_models, TranscriptionModelId, TranscriptionSelection,
+};
 
 /// Whether the list waits for its first pick, so Continue starts the
 /// selected row.
-pub(super) fn pending(ui: &Ui, model: ItemStatus) -> bool {
-    offered(ui, model)
-        && matches!(model, ItemStatus::Todo | ItemStatus::Failed)
-        && ui.found.picked.is_none()
-        && !ui.found.adopting()
+pub(super) fn pending(ui: &Ui) -> bool {
+    ui.found.picked.is_none() && !ui.found.adopting()
 }
 
 /// Hex's recommended model as the list first showed it: picking a found
@@ -38,28 +26,79 @@ fn recommended(ui: &Ui) -> TranscriptionSelection {
         .unwrap_or_else(|| ui.settings.transcription.clone())
 }
 
-/// One row of the list: Hex's recommended model, or a found file.
+/// One row of the list: a catalog model, or another found file.
 enum Entry<'a> {
-    Recommended { on_disk: bool },
+    Catalog {
+        model: TranscriptionModelId,
+        on_disk: bool,
+    },
     Found(&'a Found),
 }
 
 fn entries(ui: &Ui) -> Vec<Entry<'_>> {
-    let recommended = recommended(ui).model;
-    let on_disk = ui
-        .found
-        .models
+    let recommendation = recommended(ui);
+    use TranscriptionModelId::{
+        GigaAmMultilingual, GigaAmV3, ParakeetUnifiedEnglish, ParakeetV3, WhisperLargeV3Turbo,
+    };
+    let mut catalog = vec![recommendation.model];
+    for model in [
+        GigaAmMultilingual,
+        GigaAmV3,
+        WhisperLargeV3Turbo,
+        ParakeetUnifiedEnglish,
+        ParakeetV3,
+    ] {
+        if !catalog.contains(&model) {
+            catalog.push(model);
+        }
+    }
+    let language = recommendation.language;
+    catalog
         .iter()
-        .any(|found| found.catalog == Some(recommended));
-    std::iter::once(Entry::Recommended { on_disk })
+        .map(|&model| {
+            let definition = transcription_models::definition(model);
+            Entry::Catalog {
+                model,
+                on_disk: ui
+                    .found
+                    .models
+                    .iter()
+                    .any(|found| found.catalog == Some(model))
+                    || ui
+                        .picker
+                        .installed(definition, definition.language_for(&language)),
+            }
+        })
         .chain(
             ui.found
                 .models
                 .iter()
-                .filter(|found| found.catalog != Some(recommended))
+                .filter(|found| found.catalog.is_none_or(|model| !catalog.contains(&model)))
                 .map(Entry::Found),
         )
         .collect()
+}
+
+/// Compact language descriptions, translated independently of model names.
+fn languages(model: TranscriptionModelId) -> String {
+    match model {
+        TranscriptionModelId::ParakeetUnifiedEnglish => tr("English").into(),
+        TranscriptionModelId::ParakeetV3 => tr("25 European languages").into(),
+        TranscriptionModelId::GigaAmMultilingual => {
+            tr("Russian, Kazakh, Kyrgyz, Uzbek and English, without punctuation").into()
+        }
+        TranscriptionModelId::GigaAmV3 => tr("Russian, with punctuation").into(),
+        TranscriptionModelId::WhisperLargeV3Turbo => tr("Multilingual").into(),
+        _ if transcription_models::definition(model).languages.len() > 1 => {
+            tr("Multilingual").into()
+        }
+        _ => transcription_models::definition(model)
+            .languages
+            .iter()
+            .map(|code| transcription_models::language_name(code))
+            .collect::<Vec<_>>()
+            .join(", "),
+    }
 }
 
 /// One row of the list as the first run shows it.
@@ -77,13 +116,19 @@ pub(super) fn rows(ui: &Ui, model: ItemStatus) -> Vec<ChoiceRow> {
     entries(ui)
         .into_iter()
         .enumerate()
-        .map(|(index, entry)| row(ui, &entry, index == selected, model))
+        .map(|(index, entry)| row(ui, &entry, index == selected, index == 0, model))
         .collect()
 }
 
-fn row(ui: &Ui, entry: &Entry<'_>, selected: bool, model: ItemStatus) -> ChoiceRow {
+fn row(
+    ui: &Ui,
+    entry: &Entry<'_>,
+    selected: bool,
+    recommended: bool,
+    model: ItemStatus,
+) -> ChoiceRow {
     let name = match entry {
-        Entry::Recommended { .. } => transcription_models::definition(recommended(ui).model).name,
+        Entry::Catalog { model, .. } => transcription_models::definition(*model).name,
         Entry::Found(found) => found.catalog.map_or(found.name.as_str(), |id| {
             transcription_models::definition(id).name
         }),
@@ -92,7 +137,7 @@ fn row(ui: &Ui, entry: &Entry<'_>, selected: bool, model: ItemStatus) -> ChoiceR
     let line = match (entry, started, model) {
         (_, true, ItemStatus::Failed) => tr("Couldn't prepare this model").to_owned(),
         (_, true, ItemStatus::Ready) if !ui.found.adopting() => tr("Ready").to_owned(),
-        (Entry::Recommended { on_disk: false }, true, ItemStatus::Downloading(progress)) => {
+        (Entry::Catalog { on_disk: false, .. }, true, ItemStatus::Downloading(progress)) => {
             tr_fill(
                 "Downloading… {}%",
                 &((progress * 100.0).round() as u32).to_string(),
@@ -101,18 +146,38 @@ fn row(ui: &Ui, entry: &Entry<'_>, selected: bool, model: ItemStatus) -> ChoiceR
         (_, true, _) if ui.found.adopting() || model != ItemStatus::Ready => {
             tr("Checking…").to_owned()
         }
-        (Entry::Recommended { on_disk: false }, ..) => tr_fill(
+        (
+            Entry::Catalog {
+                model,
+                on_disk: false,
+            },
+            ..,
+        ) => tr_fill(
             "{} download",
-            &transcription_models::definition(recommended(ui).model).size_label(),
+            &transcription_models::definition(*model).size_label(),
         ),
-        (Entry::Recommended { on_disk: true }, ..) => tr("On this computer").to_owned(),
+        (
+            Entry::Catalog {
+                model,
+                on_disk: true,
+            },
+            ..,
+        ) => format!(
+            "{} · {}",
+            tr("On this computer"),
+            transcription_models::definition(*model).size_label()
+        ),
         (Entry::Found(found), ..) if found.catalog.is_some() => tr("On this computer").to_owned(),
         (Entry::Found(_), ..) => tr("On this computer · not tested by Hex").to_owned(),
+    };
+    let line = match entry {
+        Entry::Catalog { model, .. } => format!("{line} · {}", languages(*model)),
+        Entry::Found(_) => line,
     };
     ChoiceRow {
         name: name.to_owned(),
         line,
-        recommended: matches!(entry, Entry::Recommended { .. }),
+        recommended,
         selected,
     }
 }
@@ -140,25 +205,30 @@ pub(super) fn pick(ui: &mut Ui, index: usize) {
     if (ui.found.picked == Some(index) && !failed) || ui.found.adopting() {
         return;
     }
-    let found = match entries(ui).get(index) {
+    // Preserve the initial recommendation even if the host saves a later pick.
+    ui.found
+        .recommended
+        .get_or_insert_with(|| ui.settings.transcription.clone());
+    let (catalog, found) = match entries(ui).get(index) {
         None => return,
-        Some(Entry::Recommended { .. }) => None,
-        Some(Entry::Found(found)) => Some((*found).clone()),
+        Some(Entry::Catalog { model, .. }) => (Some(*model), None),
+        Some(Entry::Found(found)) => (found.catalog, Some((*found).clone())),
     };
     ui.found.picked = Some(index);
     ui.found.error = None;
-    match found {
-        None => prepare(ui, recommended(ui)),
-        Some(found) => match found.catalog {
-            Some(model) => {
-                let language = transcription_models::definition(model)
-                    .language_for(&recommended(ui).language)
-                    .to_owned();
-                prepare(ui, TranscriptionSelection { model, language });
+    match catalog {
+        Some(model) => {
+            let language = transcription_models::definition(model)
+                .language_for(&recommended(ui).language)
+                .to_owned();
+            prepare(ui, TranscriptionSelection { model, language });
+        }
+        // Hashed once and registered in place first, then prepared.
+        None => {
+            if let Some(found) = found {
+                super::found::adopt(ui, found, true);
             }
-            // Hashed once and registered in place first, then prepared.
-            None => super::found::adopt(ui, found, true),
-        },
+        }
     }
 }
 
@@ -171,13 +241,13 @@ pub(super) fn prepare(ui: &mut Ui, selection: TranscriptionSelection) {
             ItemStatus::Todo | ItemStatus::Failed
         )
     });
+    ui.found.choice = Some(selection.clone());
     if requested {
         ui.send(super::Request::ChooseModel {
             model: selection.model,
             language: selection.language,
         });
     } else {
-        ui.found.choice = Some(selection);
         super::onboarding::input(ui, Input::Grant(SetupItem::Model));
     }
 }

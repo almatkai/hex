@@ -1,6 +1,14 @@
 //! Antigravity account and summaries strings. Extra columns are pt, fr, ru.
 #[rustfmt::skip]
 pub(super) const TRANSLATIONS: &[(&str, [&str; 6])] = &[
+("Ask meetings", ["Zapytaj o spotkania", "询问会议", "会議に質問", "Fragen zu Meetings", "Preguntar sobre reuniones", "Запитати про зустрічі"]),
+("Ask questions about a meeting with Antigravity; sends transcript excerpts to Google", ["Zadawaj pytania o spotkanie przez Antigravity; wysyła fragmenty transkrypcji do Google", "通过 Antigravity 询问会议内容；会将转录片段发送给 Google", "Antigravity で会議に質問します。文字起こしの抜粋を Google に送信します", "Fragen zu einem Meeting mit Antigravity stellen; sendet Transkriptauszüge an Google", "Pregunta sobre una reunión con Antigravity; envía extractos de la transcripción a Google", "Ставте запитання про зустріч через Antigravity; надсилає уривки розшифровки до Google"]),
+("Turn on Ask meetings in Labs", ["Włącz pytania o spotkania w Labs", "在 Labs 中开启询问会议", "Labs で会議への質問を有効にしてください", "Fragen zu Meetings in Labs aktivieren", "Activa las preguntas sobre reuniones en Labs", "Увімкніть запитання про зустрічі в Labs"]),
+("Turn on Meetings in Labs", ["Włącz spotkania w Labs", "在 Labs 中开启会议", "Labs で会議を有効にしてください", "Meetings in Labs aktivieren", "Activa Reuniones en Labs", "Увімкніть зустрічі в Labs"]),
+("Enter a question of at most 4000 bytes", ["Wpisz pytanie do 4000 bajtów", "请输入不超过 4000 字节的问题", "4000 バイト以内の質問を入力してください", "Eine Frage mit höchstens 4000 Bytes eingeben", "Escribe una pregunta de hasta 4000 bytes", "Введіть запитання до 4000 байтів"]),
+("Question", ["Pytanie", "问题", "質問", "Frage", "Pregunta", "Запитання"]),
+("Asking Antigravity…", ["Pytam Antigravity…", "正在询问 Antigravity…", "Antigravity に質問中…", "Antigravity wird gefragt…", "Preguntando a Antigravity…", "Запит до Antigravity…"]),
+("Turn on Ask meetings or Antigravity summaries in Labs", ["Włącz pytania o spotkania lub podsumowania Antigravity w Labs", "在 Labs 中开启询问会议或 Antigravity 摘要", "Labs で会議への質問または Antigravity の要約を有効にしてください", "Fragen zu Meetings oder Antigravity-Zusammenfassungen in Labs aktivieren", "Activa las preguntas sobre reuniones o los resúmenes de Antigravity en Labs", "Увімкніть запитання про зустрічі або підсумки Antigravity в Labs"]),
 ("Written by Antigravity ({model}). {details}", ["Napisane przez Antigravity ({model}). {details}", "由 Antigravity（{model}）撰写。{details}", "Antigravity（{model}）で作成。{details}", "Von Antigravity ({model}) geschrieben. {details}", "Escrito por Antigravity ({model}). {details}", "Написано Antigravity ({model}). {details}"]),
 ("The summary writer answered without JSON", ["Model podsumowań odpowiedział bez JSON", "摘要模型未返回 JSON", "要約モデルが JSON を返しませんでした", "Das Zusammenfassungsmodell hat ohne JSON geantwortet", "El modelo de resumen respondió sin JSON", "Модель підсумків відповіла без JSON"]),
 ("The summary writer answered invalid JSON", ["Model podsumowań zwrócił nieprawidłowy JSON", "摘要模型返回了无效的 JSON", "要約モデルが無効な JSON を返しました", "Das Zusammenfassungsmodell hat ungültiges JSON geliefert", "El modelo de resumen devolvió JSON no válido", "Модель підсумків повернула некоректний JSON"]),
@@ -28,10 +36,32 @@ pub(super) const TRANSLATIONS: &[(&str, [&str; 6])] = &[
 ("Antigravity stopped at its length limit", ["Antigravity zatrzymał się na limicie długości", "Antigravity 已达到长度上限", "Antigravity が長さの上限で停止しました", "Antigravity hat an seiner Längengrenze angehalten", "Antigravity se detuvo en su límite de longitud", "Antigravity зупинився на межі довжини"]),
 ("Antigravity client secret missing", ["Brak sekretu klienta Antigravity", "缺少 Antigravity 客户端密钥", "Antigravity のクライアントシークレットがありません", "Antigravity-Client-Secret fehlt", "Falta el secreto de cliente de Antigravity", "Відсутній секрет клієнта Antigravity"]),
 ("Open this address to sign in:", ["Otwórz ten adres, aby się zalogować:", "打开此地址进行登录：", "ログインするにはこのアドレスを開いてください:", "Öffne diese Adresse, um dich anzumelden:", "Abre esta dirección para iniciar sesión:", "Відкрийте цю адресу, щоб увійти:"]),
+("Antigravity rewriting", ["Przepisywanie Antigravity", "Antigravity 改写", "Antigravity の書き換え", "Antigravity-Überarbeitung", "Reescritura con Antigravity", "Переписування Antigravity"]),
+("Rewrite dictation with your Google Antigravity account", ["Przepisuj dyktowanie za pomocą konta Google Antigravity", "使用你的 Google Antigravity 账号改写听写", "Google Antigravity アカウントで音声入力を書き換えます", "Diktate mit deinem Google-Antigravity-Konto überarbeiten", "Reescribe dictados con tu cuenta de Google Antigravity", "Переписуйте диктування через свій обліковий запис Google Antigravity"]),
+("Rewrite dictation", ["Przepisuj dyktowanie", "改写听写", "音声入力を書き換える", "Diktat überarbeiten", "Reescribir dictado", "Переписувати диктування"]),
+("Rewrite provider", ["Usługa przepisywania", "改写服务", "書き換えサービス", "Überarbeitungsdienst", "Proveedor de reescritura", "Сервіс переписування"]),
+("Rewrite profile", ["Profil przepisywania", "改写配置", "書き換えプロファイル", "Überarbeitungsprofil", "Perfil de reescritura", "Профіль переписування"]),
+("Custom instructions", ["Własne instrukcje", "自定义指令", "カスタム指示", "Eigene Anweisungen", "Instrucciones personalizadas", "Власні інструкції"]),
+("Punctuate", ["Dodaj interpunkcję", "添加标点", "句読点を復元", "Zeichensetzung ergänzen", "Añadir puntuación", "Додати пунктуацію"]),
+("Translate to…", ["Przetłumacz na…", "翻译为…", "翻訳先…", "Übersetzen in…", "Traducir a…", "Перекласти…"]),
+("Translation language", ["Język tłumaczenia", "翻译语言", "翻訳先の言語", "Zielsprache", "Idioma de traducción", "Мова перекладу"]),
+("Russian", ["Rosyjski", "俄语", "ロシア語", "Russisch", "Ruso", "Російська"]),
+("Kazakh", ["Kazachski", "哈萨克语", "カザフ語", "Kasachisch", "Kazajo", "Казахська"]),
+("Turn on Antigravity rewriting in Labs", ["Włącz przepisywanie Antigravity w Labs", "在 Labs 中开启 Antigravity 改写", "Labs で Antigravity の書き換えをオンにしてください", "Antigravity-Überarbeitung in Labs einschalten", "Activa la reescritura con Antigravity en Labs", "Увімкніть переписування Antigravity в Labs"]),
+("Turn on Antigravity summaries or rewriting in Labs", ["Włącz podsumowania lub przepisywanie Antigravity w Labs", "在 Labs 中开启 Antigravity 摘要或改写", "Labs で Antigravity の要約または書き換えをオンにしてください", "Antigravity-Zusammenfassungen oder Überarbeitung in Labs einschalten", "Activa los resúmenes o la reescritura con Antigravity en Labs", "Увімкніть підсумки або переписування Antigravity в Labs"]),
+("Sends only this dictation to your Google account's Antigravity", ["Wysyła tylko to dyktowanie do Antigravity na Twoim koncie Google", "仅将本次听写发送到你 Google 账号的 Antigravity", "今回の音声入力だけを Google アカウントの Antigravity に送信します", "Sendet nur dieses Diktat an Antigravity in deinem Google-Konto", "Envía solo este dictado a Antigravity de tu cuenta de Google", "Надсилає лише це диктування до Antigravity вашого облікового запису Google"]),
 ];
 
 #[rustfmt::skip]
 const EXTRA: &[(&str, [&str; 3])] = &[
+("Ask meetings", ["Perguntar sobre reuniões", "Interroger les réunions", "Вопросы о встречах"]),
+("Ask questions about a meeting with Antigravity; sends transcript excerpts to Google", ["Faça perguntas sobre uma reunião com Antigravity; envia trechos da transcrição ao Google", "Posez des questions sur une réunion avec Antigravity ; envoie des extraits de transcription à Google", "Задавайте вопросы о встрече через Antigravity; фрагменты расшифровки отправляются в Google"]),
+("Turn on Ask meetings in Labs", ["Ative perguntas sobre reuniões no Labs", "Activez les questions sur les réunions dans Labs", "Включите вопросы о встречах в Labs"]),
+("Turn on Meetings in Labs", ["Ative Reuniões no Labs", "Activez Réunions dans Labs", "Включите встречи в Labs"]),
+("Enter a question of at most 4000 bytes", ["Digite uma pergunta de até 4000 bytes", "Saisissez une question de 4000 octets maximum", "Введите вопрос не длиннее 4000 байт"]),
+("Question", ["Pergunta", "Question", "Вопрос"]),
+("Asking Antigravity…", ["Perguntando ao Antigravity…", "Question à Antigravity…", "Запрос к Antigravity…"]),
+("Turn on Ask meetings or Antigravity summaries in Labs", ["Ative perguntas sobre reuniões ou resumos do Antigravity no Labs", "Activez les questions sur les réunions ou les résumés Antigravity dans Labs", "Включите вопросы о встречах или сводки Antigravity в Labs"]),
 ("Written by Antigravity ({model}). {details}", ["Escrito pelo Antigravity ({model}). {details}", "Rédigé par Antigravity ({model}). {details}", "Создано Antigravity ({model}). {details}"]),
 ("The summary writer answered without JSON", ["O modelo de resumo respondeu sem JSON", "Le modèle de résumé a répondu sans JSON", "Модель сводки ответила без JSON"]),
 ("The summary writer answered invalid JSON", ["O modelo de resumo retornou JSON inválido", "Le modèle de résumé a renvoyé un JSON non valide", "Модель сводки вернула некорректный JSON"]),
@@ -59,6 +89,20 @@ const EXTRA: &[(&str, [&str; 3])] = &[
 ("Antigravity stopped at its length limit", ["O Antigravity parou no limite de tamanho", "Antigravity s'est arrêté à sa limite de longueur", "Antigravity остановился на пределе длины"]),
 ("Antigravity client secret missing", ["Segredo do cliente Antigravity ausente", "Secret client Antigravity manquant", "Отсутствует секрет клиента Antigravity"]),
 ("Open this address to sign in:", ["Abra este endereço para entrar:", "Ouvrez cette adresse pour vous connecter :", "Откройте этот адрес, чтобы войти:"]),
+("Antigravity rewriting", ["Reescrita com Antigravity", "Réécriture Antigravity", "Переписывание Antigravity"]),
+("Rewrite dictation with your Google Antigravity account", ["Reescreva ditados com sua conta do Google Antigravity", "Réécrire les dictées avec votre compte Google Antigravity", "Переписывайте диктовку через свой аккаунт Google Antigravity"]),
+("Rewrite dictation", ["Reescrever ditado", "Réécrire la dictée", "Переписывать диктовку"]),
+("Rewrite provider", ["Provedor de reescrita", "Service de réécriture", "Сервис переписывания"]),
+("Rewrite profile", ["Perfil de reescrita", "Profil de réécriture", "Профиль переписывания"]),
+("Custom instructions", ["Instruções personalizadas", "Instructions personnalisées", "Свои инструкции"]),
+("Punctuate", ["Pontuar", "Ponctuer", "Расставить знаки препинания"]),
+("Translate to…", ["Traduzir para…", "Traduire en…", "Перевести на…"]),
+("Translation language", ["Idioma da tradução", "Langue de traduction", "Язык перевода"]),
+("Russian", ["Russo", "Russe", "Русский"]),
+("Kazakh", ["Cazaque", "Kazakh", "Казахский"]),
+("Turn on Antigravity rewriting in Labs", ["Ative a reescrita com Antigravity em Labs", "Activez la réécriture Antigravity dans Labs", "Включите переписывание Antigravity в Labs"]),
+("Turn on Antigravity summaries or rewriting in Labs", ["Ative os resumos ou a reescrita com Antigravity em Labs", "Activez les résumés ou la réécriture Antigravity dans Labs", "Включите сводки или переписывание Antigravity в Labs"]),
+("Sends only this dictation to your Google account's Antigravity", ["Envia apenas este ditado ao Antigravity da sua conta Google", "Envoie uniquement cette dictée à Antigravity de votre compte Google", "Отправляет только эту диктовку в Antigravity вашего аккаунта Google"]),
 ];
 
 pub(super) fn extra(column: usize) -> impl Iterator<Item = (&'static str, &'static str)> {

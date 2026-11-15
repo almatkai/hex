@@ -34,16 +34,21 @@ pub(super) static LABS_ICON: Icon = Icon {
 /// features turned on (Meetings and Voice Filter from Labs, Annotate in dev
 /// builds).
 pub(super) fn main_panes(ui: &Ui) -> Vec<Pane> {
-    let mut panes = vec![Pane::General, Pane::Output, Pane::History];
+    let mut panes = vec![Pane::General, Pane::Output];
+    if ui.settings.labs.antigravity_rewriting {
+        panes.push(Pane::Modes);
+    }
+    panes.push(Pane::History);
     #[cfg(hex_capture)]
     let optional = [
         Pane::Captures,
         Pane::Meetings,
         Pane::Annotate,
         Pane::VoiceFilter,
+        Pane::Remote,
     ];
     #[cfg(not(hex_capture))]
-    let optional = [Pane::Meetings, Pane::VoiceFilter];
+    let optional = [Pane::Meetings, Pane::VoiceFilter, Pane::Remote];
     panes.extend(optional.into_iter().filter(|pane| pane.shown(ui)));
     panes
 }
@@ -325,6 +330,18 @@ fn rows(ui: &Ui) -> Vec<Row> {
         None => row(feature, icon, title, about),
     };
     let mut rows = Vec::new();
+    rows.push(row(
+        Feature::MeetingAsk,
+        None,
+        tr("Ask meetings"),
+        tr("Ask questions about a meeting with Antigravity; sends transcript excerpts to Google"),
+    ));
+    rows.push(row(
+        Feature::AntigravityRewriting,
+        None,
+        tr("Antigravity rewriting"),
+        tr("Rewrite dictation with your Google Antigravity account"),
+    ));
     rows.push(row(
         Feature::AntigravitySummaries,
         None,
@@ -801,6 +818,12 @@ fn rows(ui: &Ui) -> Vec<Row> {
         tr("Adds hex transcribe <file> to turn a WAV recording into text with your dictation model."),
     ));
     rows.push(row(
+        Feature::RemoteDictation,
+        None,
+        tr("Remote dictation"),
+        tr("Dictate from a paired phone over Tailscale"),
+    ));
+    rows.push(row(
         Feature::ApiProcessing,
         None,
         tr("Process API transcripts"),
@@ -906,7 +929,9 @@ fn row_key(lab: Lab) -> &'static str {
         Feature::FailureNotices => "lab-failure-notices",
         Feature::LiveTyping => "lab-live-typing",
         Feature::LiveChapters => "lab-live-chapters",
+        Feature::MeetingAsk => "lab-meeting-ask",
         Feature::AntigravitySummaries => "lab-antigravity-summaries",
+        Feature::AntigravityRewriting => "lab-antigravity-rewriting",
         Feature::VocabularyBiasing => "lab-vocabulary-biasing",
         Feature::TerminalPaste => "lab-terminal-paste",
         Feature::KeyboardModelSwitching => "lab-keyboard-model-switching",
@@ -970,6 +995,7 @@ fn row_key(lab: Lab) -> &'static str {
         Feature::ExpireMeetingAudio => "lab-expire-meeting-audio",
         Feature::OpenCodeInWsl => "lab-opencode-in-wsl",
         Feature::TranscribeFiles => "lab-transcribe-files",
+        Feature::RemoteDictation => "lab-remote-dictation",
         Feature::ApiProcessing => "lab-api-processing",
         Feature::ApiTimestamps => "lab-api-timestamps",
         Feature::SpeakersOnly => "lab-speakers-only",

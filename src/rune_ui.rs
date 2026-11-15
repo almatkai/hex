@@ -55,6 +55,7 @@ mod platform;
 mod platform_settings;
 pub(crate) mod playground;
 mod practice;
+mod remote;
 mod scenes;
 #[cfg(hex_capture)]
 mod scrawl;
@@ -673,6 +674,7 @@ pub(crate) struct Ui {
     duck_volume_drag: Option<f32>,
     models: models::Models,
     antigravity: antigravity::Account,
+    remote: remote::RemotePane,
     history: history::HistoryPane,
     #[cfg(hex_capture)]
     captures: captures::CapturesPane,
@@ -792,6 +794,7 @@ impl Ui {
             duck_volume_drag: None,
             models: models::Models::default(),
             antigravity: antigravity::Account::default(),
+            remote: remote::RemotePane::default(),
             history: history::HistoryPane::default(),
             #[cfg(hex_capture)]
             captures: captures::CapturesPane::default(),
@@ -869,15 +872,23 @@ impl Ui {
             Service::Pending(_) => {}
         }
         self.error = None;
+        let rewriting_was_on = self.settings.labs.antigravity_rewriting;
         self.settings = candidate;
         self.draft_since = None;
-        self.settings_changed();
+        self.settings_changed(rewriting_was_on);
         true
     }
 
-    /// Meetings turned off forgets its view: turning it back on lists the
-    /// recordings.
-    fn settings_changed(&mut self) {
+    /// Turning a feature off closes its pane or resets its feature view.
+    fn settings_changed(&mut self, rewriting_was_on: bool) {
+        if rewriting_was_on && self.pane == Pane::Modes && !self.settings.labs.antigravity_rewriting
+        {
+            self.pane = Pane::Output;
+            self.open = None;
+        }
+        if !crate::labs::Feature::RemoteDictation.on(&self.settings) {
+            self.remote = remote::RemotePane::default();
+        }
         if !meetings::available(self) {
             self.meetings.view = meetings::View::Recordings;
         }
@@ -1073,8 +1084,9 @@ impl Ui {
             if !drafts.vocabulary && service.vocabulary != self.settings.vocabulary {
                 self.vocabulary.reload(&service.vocabulary);
             }
+            let rewriting_was_on = self.settings.labs.antigravity_rewriting;
             self.settings = service.clone();
-            self.settings_changed();
+            self.settings_changed(rewriting_was_on);
         }
         self.service_settings = Some(service);
         changed
@@ -1259,20 +1271,38 @@ fn poll(ui: &mut Ui, clock: f64, tx: &mut Tx) -> bool {
     }
     let now = Instant::now();
     let mut changed = ui.save_drafts(now);
+    changed |= remote::poll(ui, clock);
     changed |= paste_access::poll(ui);
+    changed |= meetings::questions::poll(ui);
     changed |= ui.antigravity.poll(
         ui.live()
             && !ui.labs_open
-            && ui.pane == Pane::Meetings
-            && ui.settings.labs.antigravity_summaries
-            && ui.settings.meetings.summaries == crate::app_settings::MeetingSummaries::Antigravity
+            && ((ui.pane == Pane::Meetings
+                && (ui.settings.labs.meeting_ask
+                    || (ui.settings.labs.antigravity_summaries
+                        && ui.settings.meetings.summaries
+                            == crate::app_settings::MeetingSummaries::Antigravity)))
+                || (ui.pane == Pane::Modes
+                    && ui.settings.labs.antigravity_rewriting
+                    && modes::mode(&ui.settings, ui.modes.selected)
+                        .post_processing
+                        .enabled
+                    && modes::mode(&ui.settings, ui.modes.selected)
+                        .post_processing
+                        .provider
+                        == crate::app_settings::RewriteProvider::Antigravity))
             && ui.window.as_ref().is_some_and(rune::AppHandle::is_visible),
     );
     // The OpenCode catalog is read only while a pane that uses it shows:
     // Modes, or Meetings › Settings while OpenCode writes the summaries.
     changed |= ui.models.poll(
         ui.live()
-            && (ui.pane == Pane::Modes || platform_settings::summary_model_shown(ui))
+            && ((ui.pane == Pane::Modes
+                && modes::mode(&ui.settings, ui.modes.selected)
+                    .post_processing
+                    .provider
+                    == crate::app_settings::RewriteProvider::OpenCode)
+                || platform_settings::summary_model_shown(ui))
             && ui.window.as_ref().is_some_and(rune::AppHandle::is_visible),
     );
     let history_multi = history::multi(ui);
@@ -1403,6 +1433,7 @@ fn view(ui: &Ui, cx: &mut Cx<Ui>) -> El {
     let mut layer = Vec::new();
     let (actions, body) = match ui.pane {
         _ if ui.labs_open => (vec![labs::tabs(ui, p)], labs::page(ui, p)),
+        Pane::Remote => (Vec::new(), remote::pane(ui, p)),
         Pane::General => (Vec::new(), general::pane(ui, p, &mut layer)),
         Pane::Output => (Vec::new(), output::pane(ui, p, cx.is_reduced_motion())),
         Pane::Modes => modes::pane(ui, p, &mut layer),

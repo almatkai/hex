@@ -199,6 +199,14 @@ pub(crate) fn event_summary(event: &VoiceEvent) -> String {
             format!("Local API started on port {port}")
         }
         VoiceEvent::ApiServerStopped { .. } => "Local API stopped".into(),
+        VoiceEvent::RemoteRequest {
+            device,
+            operation,
+            outcome,
+            ..
+        } => {
+            format!("Remote {operation} · {device} · {outcome}")
+        }
         VoiceEvent::ApiAuthFailed { method, path, .. } => {
             format!("Rejected unauthenticated {method} {path}")
         }

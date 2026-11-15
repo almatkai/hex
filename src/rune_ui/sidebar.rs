@@ -60,7 +60,7 @@ pub(super) enum Pane {
     /// What Hex does to every dictation and in some apps, read-only: the
     /// person's agent edits it.
     Output,
-    /// The old per-app editor, kept for its scenes until it is removed.
+    /// The per-app editor, exposed by Labs › Antigravity rewriting.
     Modes,
     /// Recorded calls and their settings, or the opt-in (macOS beta).
     Meetings,
@@ -77,6 +77,7 @@ pub(super) enum Pane {
     /// The Hex Microphone's driver, tuning, and try-it demo (macOS, while
     /// its Labs toggle is on).
     VoiceFilter,
+    Remote,
     /// The dictation indicator's tuning scene (Playground only).
     HudLab,
     /// Legacy event-log inspector scene (Playground only).
@@ -96,6 +97,7 @@ impl Pane {
         #[cfg(hex_capture)]
         Pane::Annotate,
         Pane::VoiceFilter,
+        Pane::Remote,
         Pane::HudLab,
         Pane::Activity,
     ];
@@ -103,7 +105,9 @@ impl Pane {
     pub(super) fn shown(self, ui: &Ui) -> bool {
         let caps = ui.platform.caps;
         match self {
-            Pane::Modes | Pane::HudLab | Pane::Activity => false,
+            Pane::Remote => crate::labs::Feature::RemoteDictation.on(&ui.settings),
+            Pane::Modes => ui.settings.labs.antigravity_rewriting,
+            Pane::HudLab | Pane::Activity => false,
             Pane::Meetings => caps.meetings && meetings::available(ui),
             // On from Labs (dev builds), or while its driver is installed.
             Pane::VoiceFilter => caps.fun && fun::running(ui),
@@ -118,6 +122,7 @@ impl Pane {
 
     pub(super) fn title(self) -> &'static str {
         match self {
+            Pane::Remote => tr("Remote dictation"),
             Pane::General => tr("General"),
             Pane::Output => tr("Output"),
             Pane::Modes => tr("Modes"),
@@ -135,6 +140,7 @@ impl Pane {
 
     pub(super) fn key(self) -> &'static str {
         match self {
+            Pane::Remote => "nav-remote",
             Pane::General => "nav-general",
             Pane::Output => "nav-output",
             Pane::Modes => "nav-modes",
@@ -152,6 +158,7 @@ impl Pane {
 
     pub(super) fn icon(self) -> &'static Icon {
         match self {
+            Pane::Remote => &VOICE_FILTER_ICON,
             Pane::General => &SETTINGS_ICON,
             Pane::Output => &OUTPUT_ICON,
             Pane::Modes => &MODES_ICON,

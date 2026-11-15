@@ -235,6 +235,44 @@ hardware.
 
 ## Sub-features
 
+### Ask about a meeting (Labs)
+
+```ts
+Labs > Ask meetings (Everyone; every OS; off by default) // meetings.ask
+├── Requires Meetings on and a signed-in Antigravity account
+│   └── Meetings > Settings shows Google sign-in and the Antigravity model
+├── Recordings > select a meeting > Question > Ask
+│   ├── A cancellable worker answers below the question, outside the UI thread
+│   └── Switching meetings, leaving the pane, or disabling the lab cancels it
+└── hex meetings ask latest "What did we decide?" [--json]
+    └── Local command; no running Hex needed; same selector as show
+```
+
+An explicit Ask sends up to 12,000 UTF-8 bytes of timestamped transcript and
+2,000 bytes of stored notes to the selected Google Antigravity model. Short
+transcripts are sent whole; long ones use the existing BM25 search to rank
+notes-style chunks by the question, with adjacent context, in timestamp order.
+Lexical search does not translate a question into the transcript's language;
+cross-language retrieval can miss relevant passages in long meetings. The prompt
+asks for an answer in the question's language (including Russian, Kazakh, and
+English), approximate timestamp citations, and an explicit lack-of-evidence answer
+when the supplied excerpts do not answer it. This is model guidance, not a
+guarantee of factual accuracy. `excerpted` identifies a partial transcript.
+
+The worker checks the two Labs gates and sign-in before reading the meeting,
+yields to dictation for up to 30 seconds like notes, and has a 90-second total
+deadline including that wait. Native Antigravity transport uses `net` and its
+translated public errors. Questions and answers are ephemeral: no meeting writes
+and no transcript, question, or answer text in logs. Summaries can remain off.
+
+Sources: [ask.rs](../../src/meeting/ask.rs),
+[window controls](../../src/rune_ui/meetings/questions.rs), and
+[CLI](../../src/control/transcript_cli.rs). Checks cover fixture excerpts, Unicode
+bounds, BM25 selection, language-preserving prompts, admission gates, cancellation,
+CLI JSON, and native HTTP fixture/error mapping. Scenes `meetings-ask` and
+`meetings-ask-signed-out` show the controls. No real-account answer or native
+window interaction has been verified; scenes do not establish answer quality.
+
 ### Detect And Offer
 
 ```ts

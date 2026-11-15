@@ -121,6 +121,11 @@ fn command(host: &dyn Host, command: ControlCommand) -> ControlReply {
     let reply =
         |result: Result<ControlReply, ControlError>| result.unwrap_or_else(ControlReply::from);
     match command {
+        ControlCommand::Remote { action } => reply(
+            crate::local_api::remote::command(action)
+                .map(ControlReply::done)
+                .map_err(|e| ControlError::new("remote-unavailable", e.to_string())),
+        ),
         ControlCommand::Status => reply(status(host)),
         ControlCommand::Quit { force } | ControlCommand::Restart { force } => {
             let restart = matches!(command, ControlCommand::Restart { .. });

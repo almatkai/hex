@@ -23,17 +23,20 @@ feedback and Run setup again.
 
 ```ts
 Feature             Pane  Toggle (settings.json, hex settings)   On: what it does
+Remote dictation    yes   remote_dictation.enabled + remote_dictation.port + remote_dictation.process_transcripts (every desktop OS) paired phones send audio over Tailscale; off by default
 ├── Meetings (beta) yes   meetings.enabled             (macOS)   Meetings joins the sidebar: call detection, recording, transcripts
 ├── Voice Filter (Dev) yes experimental.hex_microphone (macOS, Linux) Voice Filter joins the sidebar; feeds the Hex Microphone (macOS driver, Linux PipeWire source)
 │                                        a stable build never feeds it; with the macOS driver installed it keeps the pane with Uninstall alone
 ├── Playground (Dev) yes  labs.playground                        a Playground sidebar item and ⇧⌘D open the story browser
 ├── Live text       no    labs.live_text                         provisional words beside the HUD while dictating
+├── Antigravity rewriting yes labs.antigravity_rewriting (every OS, Everyone) Modes joins the sidebar with per-mode OpenCode/Antigravity rewriting, Punctuate and Translate profiles, and the shared Google account sign-in; off skips Antigravity before any credentials or HTTP work (modes.md)
 ├── Failure notices no    labs.failure_notices                   when a dictation fails, its explanation sits beside the HUD for about 6 s, or until the next capture starts
 ├── Live typing     no    labs.live_typing                       (Linux Wayland) provisional words as an underlined input-method preedit in the focused field; the final text is committed there instead of pasted
 ├── Settings search no    labs.settings_search                  a search field atop General filters its rows, Advanced's included
 ├── Appearance      no    labs.appearance + labs.appearance_theme (system/light/dark, default system)  the main window is forced light or dark instead of following the system; the onboarding HUD preview and the Sounds sheet's HUD replay inside the window, and every overlay window, keep following the OS. On Windows the title bar follows too, through its background and light/dark mode; Windows 10 has no caption colour, so DWM keeps its own light or dark caption background (builds before 19041 keep the OS caption) while its text and buttons follow
 ├── Release notes link no labs.release_notes_link               the sidebar footer links this build's release notes: the dev changelog on a dev build, GitHub's release on a stable version
 ├── Live chapters   no    labs.live_chapters           (macOS)   chapters a meeting while it records, boundary pass after Stop
+├── Ask meetings    no    labs.meeting_ask             (every OS) ask about the selected meeting in the pane or hex meetings ask; requires Meetings and Google sign-in, sends bounded transcript excerpts and notes to Antigravity
 ├── Vocabulary biasing no labs.vocabulary_biasing                Parakeet transcription biased toward the vocabulary (#452/#457)
 ├── Switch model with keyboard language  no  keyboard_model_switching.enabled  (macOS, Windows, X11)
 │                                        the input source picks its mapped model (#216); General shows the mappings while on
@@ -2879,3 +2882,10 @@ off, without substituting a different writer. See [Meetings](meetings.md#antigra
 `antigravity_summaries_are_off_by_default_and_available_to_everyone` test checks
 its default, audience, group, round trip and runtime switch. The generator and
 pane availability check the lab and signed-in account separately.
+
+
+Remote dictation has its own [feature map](remote-dictation.md) and
+[API contract](../remote-dictation.md). Its listener checks the runtime Lab
+before accepting work, uses hashed revocable device credentials, and shares
+the local API's bounded transcription/stream handlers. Windows firewall
+setup is manual; no phone-to-PC inference or QR scan has been verified.

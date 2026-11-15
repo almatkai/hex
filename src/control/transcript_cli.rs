@@ -125,6 +125,13 @@ pub enum MeetingsCommand {
         #[arg(long, conflicts_with_all = ["from", "to"])]
         chapter: Option<usize>,
     },
+    /// Ask Antigravity about a meeting (Labs; sends transcript excerpts to Google).
+    Ask {
+        id: String,
+        question: String,
+        #[arg(long)]
+        json: bool,
+    },
     /// List a meeting's chapters (Labs), by id, unique
     /// prefix, or latest.
     Chapters {
@@ -587,6 +594,21 @@ pub fn meetings(command: &MeetingsCommand) -> Result<()> {
     let now = crate::desktop::events::now_ms();
     let mut out = io::stdout().lock();
     match command {
+        MeetingsCommand::Ask { id, question, json } => {
+            let settings = AppSettings::read().wrap_err("could not read settings.json")?;
+            let answer = crate::meeting::ask::answer(
+                &settings,
+                || resolve(&library, id),
+                question,
+                &std::sync::atomic::AtomicBool::new(false),
+            )?;
+            if *json {
+                write_json(&mut out, &answer)
+            } else {
+                writeln!(out, "{}", answer.answer)?;
+                Ok(())
+            }
+        }
         MeetingsCommand::List(args) => {
             let query = ListQuery {
                 since: args.since.clone(),

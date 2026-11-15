@@ -18,8 +18,8 @@ pub(super) struct FoundState {
     /// Compatible models from the last hub-cache scan, which the picker and
     /// onboarding start when they open.
     pub(super) models: Vec<Found>,
-    /// The model onboarding's choice asked for, which the next model
-    /// download prepares instead of the saved selection.
+    /// The model onboarding asked to prepare. Progress follows this choice
+    /// while the host still holds the previous saved selection.
     pub(super) choice: Option<TranscriptionSelection>,
     scan: Option<Receiver<Vec<Found>>>,
     /// Hashing and registering a chosen file; true when onboarding chose it.

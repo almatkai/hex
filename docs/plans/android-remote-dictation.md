@@ -1,6 +1,14 @@
 # Android remote dictation over Tailscale
 
-Status: plan only, not scheduled (2026-11-13). Nothing here is built.
+Status: Hex-side core implemented (2026-11-15): Labs/settings,
+Tailscale-only listener, pairing and hashed revocable tokens, existing
+whole-clip/stream handlers, CLI, settings pane/QR and contract are implemented
+in this change. Local Windows build, strict Clippy, security/API/Labs/i18n tests and
+light/dark fixture renders passed (details below). No Android app, phase 0 phone spike or tailnet end-to-end inference
+has been verified. Linux pane goldens remain pending. Windows firewall rules
+are deliberately manual and interface-scoped; Hex never elevates or adds
+an application-wide exception. See [the contract](../remote-dictation.md)
+and [feature map](../features/remote-dictation.md).
 
 ## Goal
 
@@ -170,3 +178,41 @@ phase's review → Opus. All checks run locally, never on GitHub Actions.
 - This opens a network door into Hex, which is otherwise local. The narrow
   route list, Tailscale-only bind, pairing and revocable tokens, and the
   Labs default-off keep that door small.
+
+
+## Hex implementation verification (2026-11-15)
+
+Windows PC only, isolated Application Support/APPDATA/LOCALAPPDATA; the
+installed Hex was not touched. `cargo build --locked --bin hex` and
+`cargo clippy --locked --bin hex -- -D warnings` passed. Test filters:
+`remote` 15 passed, `local_api` 54 passed, `labs` 66 passed, `i18n` 25 passed.
+`settings` had 136 passes and exactly the three known Russian-locale failures:
+`launch_publishes_the_saved_selection_before_the_worker_starts`,
+`invalid_remembered_languages_are_not_offered_by_model_switching`, and
+`model_switches_remember_language_without_changing_other_settings`.
+Formatting and code-shape checks passed. Tailscale CLI address detection
+returned a valid CGNAT address; no production listener was enabled.
+
+Inspected Windows light/dark renders: `remote-dictation`,
+`remote-dictation-pairing`, `remote-dictation-unavailable`, `windows-labs`.
+The GPU renderer emitted LLVM legalization diagnostics, but all render
+commands succeeded and the resulting PNGs were inspected. These fixtures
+prove layout only, not a native interactive settings or phone flow.
+
+Linux goldens were intentionally not regenerated on Windows. New golden
+scenes are the three `remote-dictation*` scenes in both themes; Labs scenes
+(`mac-labs*`, `windows-labs`, `linux-labs`) change their feature counts and
+new-feature card. No GitHub Actions were run or dispatched.
+
+The required Rune dev-head update was attempted at
+`0cb4e6b2888c6c9e199a4b0eedc86173ab75db46`; dependency resolution failed
+because published `parley_engine 0.12.0` lacks `line-dictionaries`. Rune now
+provides this in its vendored dependency, which needs a matching consumer
+patch. This feature retains Hex's existing Rune pin rather than changing
+the text stack as part of the remote security boundary.
+
+Phase 1 still needs a scoped Windows firewall rule and a real second-tailnet
+device WAV/stream check, including `/control` returning 404. Phase 0 and
+Android phases 2/3 remain untouched. Long whole clips retain the existing
+service's model-copy fallback; only streams guarantee using the held engine.
+Phone History stays off pending the open product decision.

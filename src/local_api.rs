@@ -18,6 +18,7 @@ mod discovery;
 mod http;
 mod meeting_events;
 pub(crate) mod processing;
+pub(crate) mod remote;
 mod streams;
 pub(crate) mod timestamps;
 mod transcriptions;
@@ -63,6 +64,7 @@ type ModelPreparer =
 
 pub struct LocalApi {
     shutdown: Arc<AtomicBool>,
+    remote: Option<remote::Supervisor>,
     worker: Option<JoinHandle<()>>,
     discovery: Option<DiscoveryLease>,
     document: DiscoveryDocument,
@@ -90,6 +92,7 @@ struct AuthObservationLimiter {
 
 struct HttpContext {
     token: Arc<str>,
+    remote: Option<Arc<remote::State>>,
     health: HealthProvider,
     events: EventLog,
     auth_limiter: AuthObservationLimiter,
@@ -133,6 +136,8 @@ struct CapabilitiesResponse {
 /// Optional control channels the running app exposes through its local API.
 #[derive(Default)]
 pub struct LocalApiOptions {
+    /// Set only by the desktop app entry point, never by fixture or helper APIs.
+    pub(crate) remote_listener: bool,
     pub developer_control: Option<SyncSender<crate::control::developer_control::DeveloperCall>>,
     /// The `hex` control commands (`POST /control`).
     pub control: Option<SyncSender<crate::control::ControlCall>>,
@@ -154,7 +159,8 @@ pub struct LocalApiOptions {
 
 impl LocalApi {
     /// Start the one app-owned local API and publish its discovery document.
-    pub fn start(events: EventLog, options: LocalApiOptions) -> Result<Self> {
+    pub fn start(events: EventLog, mut options: LocalApiOptions) -> Result<Self> {
+        options.remote_listener = options.control.is_some();
         let instance = crate::desktop::instance::acquire("local-api")?;
         Self::start_bound(
             Some(crate::app_paths::local_api_discovery_file()?),
@@ -264,8 +270,10 @@ impl LocalApi {
         let stop_observed = Arc::new(AtomicBool::new(false));
         let worker_stop_observed = stop_observed.clone();
         let unexpected_shutdown = worker_shutdown.clone();
+        let app_owned = options.remote_listener && options.control.is_some();
         let http_context = HttpContext {
             token: token.into(),
+            remote: None,
             health,
             events: worker_events.clone(),
             auth_limiter: AuthObservationLimiter::default(),
@@ -283,11 +291,14 @@ impl LocalApi {
             processing: options.processing,
             timestamps: options.timestamps,
         };
+        let remote = app_owned
+            .then(|| remote::Supervisor::start(&http_context, address.port()))
+            .transpose()?;
         let (ready, readiness) = mpsc::sync_channel(1);
         let worker = thread::Builder::new()
             .name("local-api".into())
             .spawn(move || {
-                serve(listener, http_context, ready);
+                serve(listener, http_context, ready, None);
                 if !unexpected_shutdown.load(Ordering::Acquire) {
                     if let Some((path, document)) = worker_discovery {
                         remove_discovery_if_owned(&path, &document);
@@ -314,6 +325,7 @@ impl LocalApi {
         }
         tracing::info!(port = document.port, "local API started");
         Ok(Self {
+            remote,
             shutdown,
             worker: Some(worker),
             discovery,
@@ -344,6 +356,7 @@ impl LocalApi {
         if let Some(discovery) = &self.discovery {
             discovery.remove_if_owned();
         }
+        self.remote.take();
         self.shutdown.store(true, Ordering::Release);
         wake_acceptor(self.document.port);
         if worker.join().is_err() {
@@ -442,7 +455,12 @@ fn observe_stopped(events: &EventLog, observed: &AtomicBool) {
     }
 }
 
-fn serve(listener: TcpListener, context: HttpContext, ready: mpsc::SyncSender<bool>) {
+fn serve(
+    listener: TcpListener,
+    context: HttpContext,
+    ready: mpsc::SyncSender<bool>,
+    remote: Option<Arc<remote::State>>,
+) {
     let (connections, pending) = mpsc::sync_channel(CONNECTION_QUEUE_CAPACITY);
     let pending = Arc::new(Mutex::new(pending));
     let shutdown = context.shutdown.clone();
@@ -451,9 +469,10 @@ fn serve(listener: TcpListener, context: HttpContext, ready: mpsc::SyncSender<bo
         .filter_map(|index| {
             let pending = pending.clone();
             let context = context.clone();
+            let remote = remote.clone();
             thread::Builder::new()
                 .name(format!("local-api-http-{index}"))
-                .spawn(move || http_worker(pending, context))
+                .spawn(move || http_worker(pending, context, remote))
                 .map_err(|error| {
                     tracing::error!(%error, "could not start local API HTTP worker");
                 })
@@ -473,6 +492,7 @@ fn serve(listener: TcpListener, context: HttpContext, ready: mpsc::SyncSender<bo
         match listener.accept() {
             // The connection that woke a shutdown is not a request.
             Ok(_) if shutdown.load(Ordering::Acquire) => break,
+            Ok((_, peer)) if remote.is_some() && !remote::peer_allowed(peer.ip()) => {}
             Ok((stream, _)) => match connections.try_send(stream) {
                 Ok(()) => {}
                 Err(TrySendError::Full(mut stream)) => {
@@ -541,7 +561,11 @@ fn wake_acceptor(port: u16) {
     let _ = TcpStream::connect_timeout(&address, WAKE_TIMEOUT);
 }
 
-fn http_worker(pending: Arc<Mutex<Receiver<TcpStream>>>, context: Arc<HttpContext>) {
+fn http_worker(
+    pending: Arc<Mutex<Receiver<TcpStream>>>,
+    context: Arc<HttpContext>,
+    remote: Option<Arc<remote::State>>,
+) {
     loop {
         let stream = pending
             .lock()
@@ -559,8 +583,14 @@ fn http_worker(pending: Arc<Mutex<Receiver<TcpStream>>>, context: Arc<HttpContex
             tracing::debug!(%error, "could not set local API write timeout");
             continue;
         }
+        let mut remote_observation = None;
         let action = match read_request(&mut stream, &context.shutdown) {
-            Ok(request) => handle_request(request, &context),
+            Ok(request) => match &remote {
+                Some(state) => {
+                    remote::request(request, &context, state.clone(), &mut remote_observation)
+                }
+                None => handle_request(request, &context),
+            },
             Err(RequestReadError::TooLarge) => RequestAction::Respond(HttpResponse::empty(431)),
             Err(RequestReadError::Invalid) => RequestAction::Respond(HttpResponse::empty(400)),
             Err(RequestReadError::Deadline) => RequestAction::Respond(HttpResponse::empty(408)),
@@ -571,7 +601,24 @@ fn http_worker(pending: Arc<Mutex<Receiver<TcpStream>>>, context: Arc<HttpContex
             }
         };
         match action {
+            RequestAction::RemotePair {
+                content_length,
+                body_prefix,
+                state,
+            } => {
+                let response = remote::pair(
+                    &mut stream,
+                    content_length,
+                    body_prefix,
+                    &state,
+                    &context.shutdown,
+                );
+                let _ = write_response(&mut stream, response);
+            }
             RequestAction::Respond(response) => {
+                if let Some(observation) = &mut remote_observation {
+                    observation.response(&response);
+                }
                 if let Err(error) = write_response(&mut stream, response) {
                     tracing::debug!(%error, "local API client disconnected");
                 }
@@ -606,10 +653,13 @@ fn http_worker(pending: Arc<Mutex<Receiver<TcpStream>>>, context: Arc<HttpContex
                     body_prefix,
                     &context,
                 );
-                if let Some(response) = response
-                    && let Err(error) = write_response(&mut stream, response)
-                {
-                    tracing::debug!(%error, "transcription client disconnected");
+                if let Some(response) = response {
+                    if let Some(observation) = &mut remote_observation {
+                        observation.response(&response);
+                    }
+                    if let Err(error) = write_response(&mut stream, response) {
+                        tracing::debug!(%error, "transcription client disconnected");
+                    }
                 }
             }
             RequestAction::DeveloperControl {
@@ -658,7 +708,12 @@ fn http_worker(pending: Arc<Mutex<Receiver<TcpStream>>>, context: Arc<HttpContex
             } => {
                 dictation::handle(&mut stream, id, owner_token, action, &context);
             }
-            RequestAction::Stream(action) => streams::handle(&mut stream, action, &context),
+            RequestAction::Stream(action) => {
+                if let Some(observation) = &mut remote_observation {
+                    observation.stream();
+                }
+                streams::handle(&mut stream, action, &context);
+            }
             RequestAction::MeetingEvents(subscription) => {
                 meeting_events::stream(&mut stream, subscription, &context);
             }
@@ -674,6 +729,11 @@ fn handle_request(request: HttpRequest, context: &HttpContext) -> RequestAction 
             .observe(&context.events, &request.method, path);
         return RequestAction::Respond(HttpResponse::empty(401));
     }
+    authenticated_request(request, context)
+}
+
+fn authenticated_request(request: HttpRequest, context: &HttpContext) -> RequestAction {
+    let path = request.path.split('?').next().unwrap_or("/");
     if request.method == "POST" && path == "/transcriptions" {
         return transcription_action(
             request,
@@ -1322,6 +1382,11 @@ impl AuthObservationLimiter {
 }
 
 enum RequestAction {
+    RemotePair {
+        content_length: usize,
+        body_prefix: Vec<u8>,
+        state: Arc<remote::State>,
+    },
     Respond(HttpResponse),
     Prepare {
         model: &'static crate::transcription::models::ModelDefinition,
@@ -2119,6 +2184,7 @@ mod tests {
             crate::transcription::service::TranscriptionService::start().unwrap();
         let context = HttpContext {
             token: "test-token".into(),
+            remote: None,
             health,
             events,
             auth_limiter: AuthObservationLimiter::default(),

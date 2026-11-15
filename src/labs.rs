@@ -99,6 +99,8 @@ impl Feature {
             | Self::FailureNotices
             | Self::LiveTyping
             | Self::AntigravitySummaries
+            | Self::MeetingAsk
+            | Self::AntigravityRewriting
             | Self::LiveChapters
             | Self::VocabularyBiasing
             | Self::TerminalPaste
@@ -161,6 +163,7 @@ impl Feature {
             | Self::CapsLockDictation
             | Self::OpenCodeInWsl
             | Self::TranscribeFiles
+            | Self::RemoteDictation
             | Self::ApiProcessing
             | Self::ApiTimestamps
             | Self::SpeakersOnly
@@ -172,7 +175,9 @@ impl Feature {
     /// The day it joined Labs, as `yyyymmdd`. Labs marks the newest as New.
     pub const fn added(self) -> u32 {
         match self {
+            Self::MeetingAsk | Self::RemoteDictation => 20261115,
             Self::AntigravitySummaries => 20261113,
+            Self::AntigravityRewriting => 20261115,
             Self::Meetings
             | Self::VoiceFilter
             | Self::Playground
@@ -261,6 +266,9 @@ impl Feature {
     /// The feature `hex settings` key `key` switches (its toggle, or
     /// Unload when idle's minutes).
     pub fn for_settings_key(key: &str) -> Option<Self> {
+        if key.starts_with("remote_dictation.") {
+            return Some(Self::RemoteDictation);
+        }
         if key == "labs.unload_idle_minutes" {
             return Some(Self::UnloadIdle);
         }
@@ -281,7 +289,7 @@ impl Feature {
     /// Whether this OS has the feature at all, in any build.
     pub fn on_this_os(self) -> bool {
         match self {
-            Self::AntigravitySummaries => true,
+            Self::AntigravitySummaries | Self::MeetingAsk | Self::AntigravityRewriting => true,
             Self::Meetings
             | Self::LiveChapters
             | Self::SubtitleExport
@@ -363,6 +371,7 @@ impl Feature {
             | Self::TranscribeFiles
             | Self::ApiProcessing
             | Self::ApiTimestamps
+            | Self::RemoteDictation
             | Self::SpeakersOnly => true,
         }
     }
@@ -377,7 +386,9 @@ impl Feature {
             Self::FailureNotices => "failure-notices",
             Self::LiveTyping => "live-typing",
             Self::LiveChapters => "live-chapters",
+            Self::MeetingAsk => "meeting-ask",
             Self::AntigravitySummaries => "antigravity-summaries",
+            Self::AntigravityRewriting => "antigravity-rewriting",
             Self::VocabularyBiasing => "vocabulary-biasing",
             Self::TerminalPaste => "terminal-paste",
             Self::KeyboardModelSwitching => "keyboard-model-switching",
@@ -439,6 +450,7 @@ impl Feature {
             Self::CapsLockDictation => "caps-lock-dictation",
             Self::OpenCodeInWsl => "opencode-in-wsl",
             Self::TranscribeFiles => "transcribe-files",
+            Self::RemoteDictation => "remote-dictation",
             Self::ApiProcessing => "api-processing",
             Self::ApiTimestamps => "api-timestamps",
             Self::SpeakersOnly => "speakers-only",
@@ -457,7 +469,9 @@ impl Feature {
             Self::FailureNotices => "labs.failure_notices",
             Self::LiveTyping => "labs.live_typing",
             Self::LiveChapters => "labs.live_chapters",
+            Self::MeetingAsk => "labs.meeting_ask",
             Self::AntigravitySummaries => "labs.antigravity_summaries",
+            Self::AntigravityRewriting => "labs.antigravity_rewriting",
             Self::VocabularyBiasing => "labs.vocabulary_biasing",
             Self::TerminalPaste => "paste_with_shift",
             Self::KeyboardModelSwitching => "keyboard_model_switching.enabled",
@@ -519,6 +533,7 @@ impl Feature {
             Self::CapsLockDictation => "labs.caps_lock_dictation",
             Self::OpenCodeInWsl => "labs.opencode_in_wsl",
             Self::TranscribeFiles => "labs.transcribe_files",
+            Self::RemoteDictation => "remote_dictation.enabled",
             Self::ApiProcessing => "labs.api_processing",
             Self::ApiTimestamps => "labs.api_timestamps",
             Self::SpeakersOnly => "labs.speakers_only",
@@ -541,7 +556,9 @@ impl Feature {
             Self::FailureNotices => settings.labs.failure_notices,
             Self::LiveTyping => settings.labs.live_typing,
             Self::LiveChapters => settings.labs.live_chapters,
+            Self::MeetingAsk => settings.labs.meeting_ask,
             Self::AntigravitySummaries => settings.labs.antigravity_summaries,
+            Self::AntigravityRewriting => settings.labs.antigravity_rewriting,
             Self::VocabularyBiasing => settings.labs.vocabulary_biasing,
             Self::TerminalPaste => settings.paste_with_shift,
             Self::KeyboardModelSwitching => settings.keyboard_model_switching.enabled,
@@ -603,6 +620,7 @@ impl Feature {
             Self::CapsLockDictation => settings.labs.caps_lock_dictation,
             Self::OpenCodeInWsl => settings.labs.opencode_in_wsl,
             Self::TranscribeFiles => settings.labs.transcribe_files,
+            Self::RemoteDictation => settings.remote_dictation.enabled,
             Self::ApiProcessing => settings.labs.api_processing,
             Self::ApiTimestamps => settings.labs.api_timestamps,
             Self::SpeakersOnly => settings.labs.speakers_only,
@@ -616,6 +634,7 @@ impl Feature {
     pub fn switches(settings: &mut AppSettings) -> Vec<&mut bool> {
         let labs = &mut settings.labs;
         vec![
+            &mut settings.remote_dictation.enabled,
             &mut settings.meetings.enabled,
             &mut settings.experimental.hex_microphone,
             &mut settings.paste_with_shift,
@@ -628,6 +647,8 @@ impl Feature {
             &mut labs.live_typing,
             &mut labs.live_chapters,
             &mut labs.antigravity_summaries,
+            &mut labs.meeting_ask,
+            &mut labs.antigravity_rewriting,
             &mut labs.vocabulary_biasing,
             &mut labs.mouse_shortcuts,
             &mut labs.unload_idle,
@@ -707,7 +728,9 @@ impl Feature {
             Self::FailureNotices => settings.labs.failure_notices = on,
             Self::LiveTyping => settings.labs.live_typing = on,
             Self::LiveChapters => settings.labs.live_chapters = on,
+            Self::MeetingAsk => settings.labs.meeting_ask = on,
             Self::AntigravitySummaries => settings.labs.antigravity_summaries = on,
+            Self::AntigravityRewriting => settings.labs.antigravity_rewriting = on,
             Self::VocabularyBiasing => settings.labs.vocabulary_biasing = on,
             Self::TerminalPaste => settings.paste_with_shift = on,
             Self::KeyboardModelSwitching => settings.keyboard_model_switching.enabled = on,
@@ -772,6 +795,7 @@ impl Feature {
             Self::CapsLockDictation => settings.labs.caps_lock_dictation = on,
             Self::OpenCodeInWsl => settings.labs.opencode_in_wsl = on,
             Self::TranscribeFiles => settings.labs.transcribe_files = on,
+            Self::RemoteDictation => settings.remote_dictation.enabled = on,
             Self::ApiProcessing => settings.labs.api_processing = on,
             Self::ApiTimestamps => settings.labs.api_timestamps = on,
             Self::SpeakersOnly => settings.labs.speakers_only = on,
@@ -916,6 +940,14 @@ pub fn window_dark(labs: &LabsSettings, system_dark: bool) -> bool {
 
 /// Records the switches the loaded or saved settings hold.
 pub(crate) fn apply(settings: &LabsSettings) {
+    ANTIGRAVITY_REWRITING.store(
+        1 + u8::from(
+            settings.antigravity_rewriting
+                && Feature::AntigravityRewriting.shipped()
+                && Feature::AntigravityRewriting.managed().is_none(),
+        ),
+        Ordering::Release,
+    );
     ANTIGRAVITY_SUMMARIES.store(
         1 + u8::from(
             settings.antigravity_summaries
@@ -1162,10 +1194,73 @@ pub fn log_launch() {
     );
 }
 
+static ANTIGRAVITY_SUMMARIES: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
+pub fn antigravity_summaries() -> bool {
+    if ANTIGRAVITY_SUMMARIES.load(Ordering::Acquire) == 0 {
+        let enabled = AppSettings::saved_labs().antigravity_summaries
+            && Feature::AntigravitySummaries.shipped()
+            && Feature::AntigravitySummaries.managed().is_none();
+        let _ = ANTIGRAVITY_SUMMARIES.compare_exchange(
+            0,
+            1 + u8::from(enabled),
+            Ordering::AcqRel,
+            Ordering::Acquire,
+        );
+    }
+    ANTIGRAVITY_SUMMARIES.load(Ordering::Acquire) == 2
+}
+
+static ANTIGRAVITY_REWRITING: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
+pub fn antigravity_rewriting() -> bool {
+    if ANTIGRAVITY_REWRITING.load(Ordering::Acquire) == 0 {
+        let enabled = AppSettings::saved_labs().antigravity_rewriting
+            && Feature::AntigravityRewriting.shipped()
+            && Feature::AntigravityRewriting.managed().is_none();
+        let _ = ANTIGRAVITY_REWRITING.compare_exchange(
+            0,
+            1 + u8::from(enabled),
+            Ordering::AcqRel,
+            Ordering::Acquire,
+        );
+    }
+    ANTIGRAVITY_REWRITING.load(Ordering::Acquire) == 2
+}
+
 #[cfg(test)]
 mod tests {
     use super::cli::resolve;
     use super::*;
+
+    #[test]
+    fn meeting_ask_is_an_everyone_meetings_lab_off_by_default() {
+        let feature = Feature::MeetingAsk;
+        let mut settings = AppSettings::default();
+        assert_eq!(feature.audience(), Audience::Everyone);
+        assert_eq!(feature.group(), Group::Meetings);
+        assert_eq!(feature.settings_key(), "labs.meeting_ask");
+        assert!(feature.on_this_os());
+        assert!(!feature.on(&settings));
+        feature.set(&mut settings, true);
+        let saved: AppSettings =
+            serde_json::from_value(serde_json::to_value(&settings).unwrap()).unwrap();
+        assert!(feature.on(&saved));
+        assert_eq!(resolve("meeting-ask", |_| true).unwrap(), feature);
+    }
+
+    #[test]
+    fn antigravity_rewriting_is_everyone_dictation_and_off_by_default() {
+        let feature = Feature::AntigravityRewriting;
+        assert_eq!(feature.audience(), Audience::Everyone);
+        assert_eq!(feature.group(), Group::Dictation);
+        assert!(feature.on_this_os());
+        assert_eq!(feature.settings_key(), "labs.antigravity_rewriting");
+        let mut settings = AppSettings::default();
+        assert!(!feature.on(&settings));
+        feature.set(&mut settings, true);
+        assert!(feature.on(&settings));
+        feature.set(&mut settings, false);
+        assert!(!feature.on(&settings));
+    }
 
     #[test]
     fn antigravity_summaries_are_off_by_default_and_available_to_everyone() {
@@ -1890,18 +1985,3 @@ mod tests {
 
 // STATE already uses all 64 bits. Keep this gate tri-state so a CLI reader
 // can lazily load saved Labs before the application has applied settings.
-static ANTIGRAVITY_SUMMARIES: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
-pub fn antigravity_summaries() -> bool {
-    if ANTIGRAVITY_SUMMARIES.load(Ordering::Acquire) == 0 {
-        let enabled = AppSettings::saved_labs().antigravity_summaries
-            && Feature::AntigravitySummaries.shipped()
-            && Feature::AntigravitySummaries.managed().is_none();
-        let _ = ANTIGRAVITY_SUMMARIES.compare_exchange(
-            0,
-            1 + u8::from(enabled),
-            Ordering::AcqRel,
-            Ordering::Acquire,
-        );
-    }
-    ANTIGRAVITY_SUMMARIES.load(Ordering::Acquire) == 2
-}

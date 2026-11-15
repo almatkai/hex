@@ -132,7 +132,7 @@ pub(super) fn excerpt_budget(context_tokens: usize, cap: usize) -> usize {
 
 /// Coalesced turns as `[mm:ss] You: text` lines, split at word boundaries
 /// so no line exceeds `LINE_CHARS`.
-fn transcript_lines(entries: &[TranscriptEntry]) -> Vec<String> {
+pub(super) fn transcript_lines(entries: &[TranscriptEntry]) -> Vec<String> {
     let mut lines = Vec::new();
     for turn in coalesce_transcript(entries.iter().cloned()) {
         let prefix = format!(

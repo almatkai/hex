@@ -18,6 +18,10 @@ impl Feature {
             Self::LiveTyping => {
                 "Show provisional words in the focused text field while dictating on Wayland, then type the final text there"
             }
+            Self::MeetingAsk => {
+                "Ask questions about a meeting with Antigravity; sends transcript excerpts to Google"
+            }
+            Self::AntigravityRewriting => "Rewrite dictation with your Google Antigravity account",
             Self::AntigravitySummaries => {
                 "Write meeting summaries with your Google Antigravity account"
             }
@@ -192,6 +196,9 @@ impl Feature {
             }
             Self::TranscribeFiles => {
                 "Turn a WAV recording into text with hex transcribe <file> and your dictation model"
+            }
+            Self::RemoteDictation => {
+                "Dictate from a paired phone over Tailscale with this computer's speech model"
             }
             Self::ApiProcessing => {
                 "Let apps using Hex's local API ask for transcripts with your Global mode's corrections, rewrite, and transformations applied"

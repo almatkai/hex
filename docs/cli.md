@@ -24,6 +24,14 @@ code, and can be captured like any other (`docs/windows.md`).
 
 The read-only `hex history` and `hex meetings list|show|chapters|search` commands, and
 `hex mcp`, read files rather than the running Hex; see `docs/transcript-cli.md`.
+`hex meetings ask <selector> "<question>" [--json]` also runs locally with
+read-only meeting access. It requires Meetings, Labs > Ask meetings
+(`labs.meeting_ask`, off by default), and Google Antigravity sign-in. An explicit
+Ask sends bounded transcript excerpts and notes to Google, using
+`meetings.antigravity_model`; it does not save the answer. Sign in through
+Meetings > Settings or `hex antigravity login` (Ask meetings or Antigravity
+summaries must be on). See `docs/transcript-cli.md` for its version 1 JSON reply,
+deadline, missing-evidence behavior, and lexical retrieval limits.
 
 ## Commands
 
@@ -43,7 +51,8 @@ hex
 │   ├── record [--title T]         as the menu bar's Record Meeting; needs meetings.enabled
 │   ├── stop                       Stop & Transcribe
 │   ├── copy-last                  copy the last meeting transcript to the clipboard
-│   └── list | show | search       read-only (docs/transcript-cli.md)
+│   ├── list | show | search       read-only (docs/transcript-cli.md)
+│   └── ask <selector> "<question>" [--json]  Labs > Ask meetings; local Antigravity answer
 ├── settings
 │   ├── list                       every setting: key, value, kind, choices, writable, about
 │   ├── get <key|prefix>           one setting, or every key under a prefix (`meetings`)
@@ -587,13 +596,52 @@ removed `permissions.input_monitoring` from the status reply; version 3 removed
 ## Antigravity account
 
 ```sh
+hex settings set labs.antigravity_summaries true
 hex antigravity login
 hex antigravity status
 hex antigravity logout
-hex settings set labs.antigravity_summaries true
 hex settings set meetings.summaries antigravity
 hex settings set meetings.antigravity_model gemini-3.8-flash
 ```
+
+Dictation can reuse that account independently of meeting summaries:
+
+```sh
+hex settings set labs.antigravity_rewriting true
+hex antigravity login
+hex settings get dictation_processing.default_mode --json
+hex settings get dictation_processing.modes --json
+```
+
+The lab is off by default, available to everyone on every OS, and checked where
+the rewrite starts. While on, Modes joins the sidebar. In either JSON-valued
+mode setting, configure the existing `post_processing` object with:
+
+```json
+{
+  "enabled": true,
+  "provider": "antigravity",
+  "antigravity_model": "gemini-3.8-flash",
+  "style": "punctuate",
+  "target_language": "english",
+  "deadline_seconds": 30
+}
+```
+
+Read the mode first and preserve its other fields when writing the updated
+object with `hex settings set dictation_processing.default_mode <json>` or the
+updated array with `hex settings set dictation_processing.modes <json>`.
+`provider` is `opencode` (the backward-compatible default) or `antigravity`;
+OpenCode's `model` and `variant` remain independent of `antigravity_model`.
+`style` is `custom` (default, uses `prompt`), `punctuate` (capitalization,
+punctuation and spoken numbers to digits, preserving Russian/Kazakh and other
+languages and wording), or `translate` (translation only). Translation uses
+`target_language`: `english`, `russian`, or `kazakh` (default `english`).
+Only this corrected transcript and its rewrite instructions reach Antigravity,
+without foreground app/site or vocabulary context. Failure, empty output,
+timeout, or cancellation falls back to the corrected transcript; transformations
+still follow. Turning the lab off skips Antigravity and keeps the saved choices.
+Account login requires either Antigravity lab; Meetings need not be enabled.
 
 The Antigravity desktop client's OAuth secret is not in the repository. Hex
 reads it from `ANTIGRAVITY_CLIENT_SECRET`, else from
@@ -622,3 +670,25 @@ not internal `MODEL_*`, `chat_*`, `tab_*` or image routes. Login/refresh persist
 folder. Expiry includes a five-minute refresh margin. The local callback and
 network operations have deadlines; closing the CLI releases its listener. UI
 sign-in also offers Cancel. No Google call is required for `status` or `logout`.
+
+
+## Remote dictation (Labs)
+
+The running desktop app handles `hex remote pair`, `hex remote devices`,
+and `hex remote revoke <id>` over the authenticated loopback control API.
+All require Labs `remote-dictation` (`remote_dictation.enabled`, default
+false). `pair` prints a version-1 JSON QR payload with the tailnet URL and
+one-use five-minute code; `devices` prints listener state/address and device
+IDs, names and last-use timestamps; `revoke` durably removes access and
+cancels active remote work before the listener restarts. Tokens are returned
+only by the remote `POST /pair` exchange, never by `devices`.
+
+Settings keys: `remote_dictation.enabled` (bool),
+`remote_dictation.port` (integer, 1024?65535, default 47821), and
+`remote_dictation.process_transcripts` (bool, default false). The last
+allows the existing `process=global` pipeline for phone results separately
+from `labs.api_processing`. `hex service` does not open the tailnet listener.
+The control wire version stays 4: the new `remote` command is additive,
+with `action` equal to `pair`, `devices`, or `revoke` (and `id` for revoke).
+See [the remote contract](remote-dictation.md) for pairing, boundaries,
+firewall setup, limits, and Android integration.

@@ -7,7 +7,7 @@ use super::live::Page;
 /// The tour state a Linux first-run scene starts from.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(in crate::rune_ui) enum FirstRun {
-    /// Nothing installed; the recommended model just started downloading.
+    /// Nothing installed; the model choice waits for the person.
     Fresh,
     /// The download is a third of the way.
     Downloading,
@@ -22,9 +22,13 @@ pub(in crate::rune_ui) enum FirstRun {
 
 pub(in crate::rune_ui) fn first_run(ui: &mut Ui, state: FirstRun, page: Page) {
     *ui = super::super::portal_fixture();
-    onboarding::fixture(ui, crate::desktop::onboarding::Step::Setup, true);
+    onboarding::fixture(
+        ui,
+        crate::desktop::onboarding::Step::Setup,
+        state != FirstRun::Fresh,
+    );
     match state {
-        FirstRun::Fresh => onboarding::set_downloaded(ui, 8),
+        FirstRun::Fresh => {}
         FirstRun::Downloading => onboarding::set_downloaded(ui, 31),
         FirstRun::Failed => {
             if let Some(view) = &mut ui.view {
@@ -44,10 +48,25 @@ pub(in crate::rune_ui) fn first_run(ui: &mut Ui, state: FirstRun, page: Page) {
     }
     onboarding::poll(ui);
     super::live::fixture(ui, page);
+    if state == FirstRun::Failed
+        && let Some(live) = ui.first_run.as_mut().and_then(|s| s.live.as_mut())
+    {
+        live.model_step = super::live::ModelStep::None;
+    }
 }
 
 pub(in crate::rune_ui) fn mac_first_run(ui: &mut Ui, step: onboarding::MacStep, page: Page) {
     *ui = super::super::mac_fixture();
+    if page == Page::Download {
+        ui.platform.permissions = crate::desktop::onboarding::SetupStatus {
+            microphone: crate::desktop::onboarding::PermissionState::NeedsRequest,
+            accessibility: crate::desktop::onboarding::PermissionState::NeedsSettings,
+            transcription_model: false,
+        };
+        onboarding::fixture(ui, crate::desktop::onboarding::Step::Setup, false);
+        super::live::fixture(ui, page);
+        return;
+    }
     onboarding::mac_fixture(ui, step);
     super::live::fixture(ui, page);
 }

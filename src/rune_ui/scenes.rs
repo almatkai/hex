@@ -8,6 +8,9 @@ use onboarding_kit::scenes::{FirstRun, first_run, mac_first_run};
 pub(super) type Scene = (&'static str, fn(&mut Ui));
 
 pub(super) const SCENES: &[Scene] = &[
+    ("remote-dictation", remote::scene),
+    ("remote-dictation-pairing", remote::pairing_scene),
+    ("remote-dictation-unavailable", remote::unavailable_scene),
     // The running service's real state, for headless snapshots and scripts
     // (`--snap`): waits for its first snapshot instead of drawing
     // "Connecting…" at virtual time zero.
@@ -153,6 +156,13 @@ pub(super) const SCENES: &[Scene] = &[
         modes::fixture(ui);
         ui.pane = Pane::Modes;
     }),
+    ("modes-antigravity", |ui| rewriting_scene(ui, true, false)),
+    ("modes-antigravity-signed-out", |ui| {
+        rewriting_scene(ui, false, false)
+    }),
+    ("modes-antigravity-translate", |ui| {
+        rewriting_scene(ui, true, true)
+    }),
     ("modes-opencode-not-running", |ui| {
         *ui = portal_fixture();
         modes::fixture(ui);
@@ -279,8 +289,8 @@ pub(super) const SCENES: &[Scene] = &[
             },
         );
     }),
-    // The first run on Linux (Windows is the same window): setting up Hex
-    // with nothing found, the model step with models found here, the demo,
+    // The first run on Linux (Windows is the same window): the model choice
+    // with nothing found and with models found here, the demo,
     // waiting for the model, the practice game, and Hex is ready.
     ("onboarding", |ui| {
         first_run(ui, FirstRun::Fresh, Page::Download)
@@ -537,6 +547,21 @@ pub(super) const SCENES: &[Scene] = &[
     ("meetings", |ui| {
         *ui = mac_fixture();
         ui.pane = Pane::Meetings;
+    }),
+    ("meetings-ask", |ui| {
+        *ui = mac_fixture();
+        ui.pane = Pane::Meetings;
+        ui.settings.meetings.enabled = true;
+        ui.settings.labs.meeting_ask = true;
+        ui.antigravity = antigravity::Account::fixture(true);
+        ui.meetings.questions = meetings::questions::Questions::fixture();
+    }),
+    ("meetings-ask-signed-out", |ui| {
+        *ui = mac_fixture();
+        ui.pane = Pane::Meetings;
+        ui.settings.meetings.enabled = true;
+        ui.settings.labs.meeting_ask = true;
+        ui.antigravity = antigravity::Account::fixture(false);
     }),
     ("meetings-settings", |ui| {
         *ui = mac_fixture();
@@ -992,4 +1017,22 @@ fn antigravity_settings(ui: &mut Ui, caps: platform::Capabilities, signed_in: bo
     ui.meetings.view = meetings::View::Settings;
     ui.pane = Pane::Meetings;
     ui.antigravity = antigravity::Account::fixture(signed_in);
+}
+
+fn rewriting_scene(ui: &mut Ui, signed_in: bool, translate: bool) {
+    use crate::app_settings::{RewriteLanguage, RewriteProvider, RewriteStyle};
+    *ui = portal_fixture();
+    modes::fixture(ui);
+    ui.settings.labs.antigravity_rewriting = true;
+    let rewrite = &mut ui.settings.dictation_processing.modes[0].post_processing;
+    rewrite.provider = RewriteProvider::Antigravity;
+    rewrite.style = if translate {
+        RewriteStyle::Translate
+    } else {
+        RewriteStyle::Punctuate
+    };
+    rewrite.target_language = RewriteLanguage::Kazakh;
+    ui.antigravity = antigravity::Account::fixture(signed_in);
+    ui.models = models::Models::fixture_not_running();
+    ui.pane = Pane::Modes;
 }

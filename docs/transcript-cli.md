@@ -17,7 +17,44 @@ hex meetings chapters latest --json
 hex meetings show 1790003000000-1005 --chapter 2
 hex meetings show latest --srt > call.srt   # Labs › Subtitle export
 hex meetings search 'release schedule'
+hex meetings ask latest "What did we decide?" --json  # Labs > Ask meetings
 ```
+
+## Ask about a meeting (Labs)
+
+`hex meetings ask <id|unique-prefix|latest> "<question>"` prints an answer grounded
+in that meeting's transcript and stored notes. It runs directly on every OS without
+a running Hex. Turn on Meetings and Ask meetings in Labs (`meetings.enabled` and
+`labs.meeting_ask`), then use `hex antigravity login` or Meetings > Settings to sign
+in. Ask meetings alone permits sign-in; Antigravity summaries can remain off.
+`meetings.antigravity_model` selects the model. The question must be nonempty and
+at most 4,000 UTF-8 bytes.
+
+This command reads the meetings folder without modifying it. An explicit Ask
+sends bounded transcript excerpts and notes to Google Antigravity; refreshing
+account credentials may update `antigravity.json`. Answers are not saved. Long
+transcripts are ranked with BM25 and may omit relevant evidence, especially when
+the question and transcript use different languages. The model is instructed to
+answer in the question's language, cite approximate timestamps when available,
+and acknowledge missing evidence. It yields to dictation before the request and
+has a 90-second deadline. Account, quota, cancellation, and timeout failures use
+the existing public Antigravity messages and exit nonzero.
+
+`--json` emits a version 1 reply (text mode prints only `answer`):
+
+```json
+{
+  "version": 1,
+  "meeting_id": "1790000000000-1001",
+  "answer": "The launch was moved to Friday [01:20].",
+  "model": "gemini-3.8-flash",
+  "excerpted": false
+}
+```
+
+`excerpted` is true when the transcript exceeded the excerpt budget. Timestamps
+are approximate offsets from the meeting start, included in the answer text;
+they are model-generated citations rather than structured, verified references.
 
 ## History filters apply before the limit
 

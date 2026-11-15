@@ -12,7 +12,7 @@ use crate::desktop::onboarding::Step;
 /// Windows. An intentional change refreshes these goldens in the same PR
 /// (`HEX_UPDATE_GOLDENS=1`).
 pub(super) const SCENES: &[&str] = &[
-    // A fresh install: setting up Hex, the recommended model downloading.
+    // A fresh install: choose a model before anything downloads.
     "onboarding",
     "mac-onboarding",
     // The download stopped; Continue without a model, then Settings.
@@ -85,6 +85,7 @@ fn onboarding_skip() {
 
     // macOS, permissions still to grant: the demo skips to them.
     let mut rt = runtime("mac-onboarding", true, PANE_SIZE);
+    tap(&mut rt, "continue");
     rt.update(|ui, _| super::super::onboarding_kit::live::fixture_resume(ui, Page::Demo));
     settle(&mut rt);
     assert_eq!(page(&rt), Some(Page::Demo));
@@ -210,6 +211,15 @@ fn the_language_capsule_switches_only_between_different_languages() {
         ui.preferred_language = Some("en".into());
         super::super::onboarding::fixture(&mut ui, Step::Setup, true);
         super::super::onboarding_kit::live::fixture(&mut ui, Page::Download);
+        // The capsule remains on download recovery; the initial page now
+        // always offers the model list instead.
+        ui.first_run
+            .as_mut()
+            .unwrap()
+            .live
+            .as_mut()
+            .unwrap()
+            .model_step = super::super::onboarding_kit::live::ModelStep::None;
         runtime_for(ui, false, PANE_SIZE)
     };
 
@@ -326,13 +336,17 @@ fn onboarding_walkthrough() {
     let mut rt = runtime_for(ui, true, PANE_SIZE);
     let step = |rt: &Runtime<Ui>| rt.state.tour.as_ref().map(|tour| tour.flow.step());
     let shown = texts(&rt);
-    assert!(shown.contains(&"Setting up Hex".to_owned()), "{shown:?}");
     assert!(
-        !shown.contains(&"Choose a speech model".to_owned()),
-        "nothing found, so no model step"
+        shown.contains(&"Choose a speech model".to_owned()),
+        "{shown:?}"
+    );
+    assert!(
+        sent(&rt).is_empty(),
+        "nothing downloads before a pick, even with an empty cache"
     );
 
-    // Setting up Hex asks the service for the recommended model at once.
+    // Continue confirms the preselected recommendation.
+    tap(&mut rt, "continue");
     assert_eq!(step(&rt), Some(Step::Setup));
     let (model, language) = match sent(&rt) {
         [Request::ChooseModel { model, language }] => (*model, language.clone()),

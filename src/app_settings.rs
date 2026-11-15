@@ -33,13 +33,16 @@ mod shortcut_repair;
 #[cfg(hex_capture)]
 pub use capture::*;
 pub use dictation_processing::{
-    DictationMode, DictationPostProcessing, DictationProcessingSettings,
+    DictationMode, DictationPostProcessing, DictationProcessingSettings, RewriteLanguage,
+    RewriteProvider, RewriteStyle,
 };
 pub use extra_shortcuts::*;
 pub use hotkeys::*;
 pub use labs::*;
+mod remote;
 pub use meeting_folder::default_meeting_output_folder;
 pub use meetings::*;
+pub use remote::RemoteDictation;
 #[cfg_attr(not(target_os = "macos"), allow(unused_imports))]
 pub use screenshots::{
     ScreenshotSettings, screenshot_hotkey, screenshot_record_hotkey, screenshot_settings,
@@ -324,6 +327,7 @@ pub struct AppSettings {
     pub experimental: ExperimentalSettings,
     /// The Labs features' own switches (`crate::labs`).
     pub labs: LabsSettings,
+    pub remote_dictation: RemoteDictation,
     /// Labs › Screenshots' shortcut and folder (macOS).
     pub screenshots: ScreenshotSettings,
     /// Start listening when Hex opens (Windows and Linux, where the
@@ -453,6 +457,7 @@ impl Default for AppSettings {
             capture_from_other_build: None,
             experimental: ExperimentalSettings::default(),
             labs: LabsSettings::default(),
+            remote_dictation: RemoteDictation::default(),
             screenshots: ScreenshotSettings::default(),
             enable_on_launch: true,
             paste_with_shift: false,
@@ -779,6 +784,7 @@ impl AppSettings {
             Ordering::Release,
         );
         crate::labs::apply(&self.labs);
+        crate::local_api::remote::configure(self);
         screenshots::apply_screenshots(self);
         #[cfg(hex_capture)]
         {
