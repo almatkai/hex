@@ -630,7 +630,7 @@ pub(super) fn preparation(ui: &Ui, model: &ModelDefinition) -> Option<(String, O
             });
             (
                 tr_fill("Downloading {}%", &format!("{:.0}", fraction * 100.0)),
-                matches!(model.runtime, ModelRuntime::Gguf(_)).then_some(fraction),
+                model.runtime.is_downloaded().then_some(fraction),
             )
         }
     })

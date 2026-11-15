@@ -101,6 +101,7 @@ impl Feature {
             | Self::AntigravitySummaries
             | Self::MeetingAsk
             | Self::AntigravityRewriting
+            | Self::GigaAmMlx
             | Self::LiveChapters
             | Self::VocabularyBiasing
             | Self::TerminalPaste
@@ -176,6 +177,7 @@ impl Feature {
     pub const fn added(self) -> u32 {
         match self {
             Self::MeetingAsk | Self::RemoteDictation => 20261115,
+            Self::GigaAmMlx => 20261115,
             Self::AntigravitySummaries => 20261113,
             Self::AntigravityRewriting => 20261115,
             Self::Meetings
@@ -252,15 +254,20 @@ impl Feature {
         }
     }
 
-    /// Why turning this feature off is refused now: Parakeet Ultra stays on
-    /// while it is the dictation model, until a switch to another succeeds.
+    /// Why turning this feature off is refused now: Parakeet Ultra and
+    /// GigaAM Multilingual (MLX) stay on while they are the dictation model,
+    /// until a switch to another succeeds.
     pub fn off_refusal(self, settings: &AppSettings) -> Option<&'static str> {
-        (self == Self::ParakeetUltra
-            && settings.transcription.model
-                == crate::transcription::models::TranscriptionModelId::ParakeetUltra)
-            .then_some(
+        use crate::transcription::models::TranscriptionModelId;
+        match (self, settings.transcription.model) {
+            (Self::ParakeetUltra, TranscriptionModelId::ParakeetUltra) => Some(
                 "Parakeet Ultra is the dictation model; choose another model before turning it off",
-            )
+            ),
+            (Self::GigaAmMlx, TranscriptionModelId::GigaAmMultilingualMlx) => Some(
+                "GigaAM Multilingual (MLX) is the dictation model; choose another model before turning it off",
+            ),
+            _ => None,
+        }
     }
 
     /// The feature `hex settings` key `key` switches (its toggle, or
@@ -290,6 +297,10 @@ impl Feature {
     pub fn on_this_os(self) -> bool {
         match self {
             Self::AntigravitySummaries | Self::MeetingAsk | Self::AntigravityRewriting => true,
+            Self::AntigravitySummaries => true,
+            // MLX runs only on Apple Silicon's Metal, and only in a build
+            // with the `mlx` cargo feature (docs/plans/gigaam-mlx.md).
+            Self::GigaAmMlx => cfg!(hex_mlx),
             Self::Meetings
             | Self::LiveChapters
             | Self::SubtitleExport
@@ -389,6 +400,7 @@ impl Feature {
             Self::MeetingAsk => "meeting-ask",
             Self::AntigravitySummaries => "antigravity-summaries",
             Self::AntigravityRewriting => "antigravity-rewriting",
+            Self::GigaAmMlx => "gigaam-mlx",
             Self::VocabularyBiasing => "vocabulary-biasing",
             Self::TerminalPaste => "terminal-paste",
             Self::KeyboardModelSwitching => "keyboard-model-switching",
@@ -472,6 +484,7 @@ impl Feature {
             Self::MeetingAsk => "labs.meeting_ask",
             Self::AntigravitySummaries => "labs.antigravity_summaries",
             Self::AntigravityRewriting => "labs.antigravity_rewriting",
+            Self::GigaAmMlx => "labs.gigaam_mlx",
             Self::VocabularyBiasing => "labs.vocabulary_biasing",
             Self::TerminalPaste => "paste_with_shift",
             Self::KeyboardModelSwitching => "keyboard_model_switching.enabled",
@@ -559,6 +572,7 @@ impl Feature {
             Self::MeetingAsk => settings.labs.meeting_ask,
             Self::AntigravitySummaries => settings.labs.antigravity_summaries,
             Self::AntigravityRewriting => settings.labs.antigravity_rewriting,
+            Self::GigaAmMlx => settings.labs.gigaam_mlx,
             Self::VocabularyBiasing => settings.labs.vocabulary_biasing,
             Self::TerminalPaste => settings.paste_with_shift,
             Self::KeyboardModelSwitching => settings.keyboard_model_switching.enabled,
@@ -649,6 +663,7 @@ impl Feature {
             &mut labs.antigravity_summaries,
             &mut labs.meeting_ask,
             &mut labs.antigravity_rewriting,
+            &mut labs.gigaam_mlx,
             &mut labs.vocabulary_biasing,
             &mut labs.mouse_shortcuts,
             &mut labs.unload_idle,
@@ -731,6 +746,7 @@ impl Feature {
             Self::MeetingAsk => settings.labs.meeting_ask = on,
             Self::AntigravitySummaries => settings.labs.antigravity_summaries = on,
             Self::AntigravityRewriting => settings.labs.antigravity_rewriting = on,
+            Self::GigaAmMlx => settings.labs.gigaam_mlx = on,
             Self::VocabularyBiasing => settings.labs.vocabulary_biasing = on,
             Self::TerminalPaste => settings.paste_with_shift = on,
             Self::KeyboardModelSwitching => settings.keyboard_model_switching.enabled = on,
@@ -945,6 +961,15 @@ pub(crate) fn apply(settings: &LabsSettings) {
             settings.antigravity_rewriting
                 && Feature::AntigravityRewriting.shipped()
                 && Feature::AntigravityRewriting.managed().is_none(),
+        ),
+        Ordering::Release,
+    );
+    GIGAAM_MLX.store(
+        1 + u8::from(
+            settings.gigaam_mlx
+                && Feature::GigaAmMlx.on_this_os()
+                && Feature::GigaAmMlx.shipped()
+                && Feature::GigaAmMlx.managed().is_none(),
         ),
         Ordering::Release,
     );
@@ -1226,6 +1251,30 @@ pub fn antigravity_rewriting() -> bool {
     ANTIGRAVITY_REWRITING.load(Ordering::Acquire) == 2
 }
 
+// Tri-state like ANTIGRAVITY_SUMMARIES: 0 unread, 1 off, 2 on.
+static GIGAAM_MLX: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
+
+/// GigaAM Multilingual (MLX) joins the catalog (read wherever a model is
+/// listed, chosen, or run). Always off where MLX isn't built in: Windows,
+/// Linux, Intel Macs, and Mac builds without the `mlx` cargo feature.
+pub fn gigaam_mlx() -> bool {
+    if !Feature::GigaAmMlx.on_this_os() {
+        return false;
+    }
+    if GIGAAM_MLX.load(Ordering::Acquire) == 0 {
+        let enabled = AppSettings::saved_labs().gigaam_mlx
+            && Feature::GigaAmMlx.shipped()
+            && Feature::GigaAmMlx.managed().is_none();
+        let _ = GIGAAM_MLX.compare_exchange(
+            0,
+            1 + u8::from(enabled),
+            Ordering::AcqRel,
+            Ordering::Acquire,
+        );
+    }
+    GIGAAM_MLX.load(Ordering::Acquire) == 2
+}
+
 #[cfg(test)]
 mod tests {
     use super::cli::resolve;
@@ -1260,6 +1309,31 @@ mod tests {
         assert!(feature.on(&settings));
         feature.set(&mut settings, false);
         assert!(!feature.on(&settings));
+    }
+
+    #[test]
+    fn gigaam_mlx_is_off_by_default_and_only_where_mlx_is_built() {
+        let feature = Feature::GigaAmMlx;
+        assert_eq!(feature.audience(), Audience::Everyone);
+        assert_eq!(feature.group(), Group::Models);
+        assert_eq!(feature.on_this_os(), cfg!(hex_mlx));
+        assert_eq!(feature.settings_key(), "labs.gigaam_mlx");
+        assert_eq!(Feature::for_settings_key("labs.gigaam_mlx"), Some(feature));
+        let mut settings = AppSettings::default();
+        assert!(!feature.on(&settings));
+        assert!(feature.off_refusal(&settings).is_none());
+        feature.set(&mut settings, true);
+        let saved = serde_json::to_vec(&settings).unwrap();
+        let read: AppSettings = serde_json::from_slice(&saved).unwrap();
+        assert!(feature.on(&read));
+        settings.transcription.model =
+            crate::transcription::models::TranscriptionModelId::GigaAmMultilingualMlx;
+        assert!(feature.off_refusal(&settings).is_some());
+        assert!(Feature::ParakeetUltra.off_refusal(&settings).is_none());
+        if !cfg!(hex_mlx) {
+            apply(&settings.labs);
+            assert!(!gigaam_mlx(), "no MLX in this build: the gate stays off");
+        }
     }
 
     #[test]

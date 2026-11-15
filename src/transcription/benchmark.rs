@@ -40,9 +40,9 @@ impl LoadedBackend {
                 Parakeet::load_for_benchmark(&model)?,
             ))),
             #[cfg(hex_mlx)]
-            Backend::Mlx { model } => Ok(Self::Mlx(Box::new(
-                crate::gigaam_mlx::GigaAmMlx::load(&model, None)?,
-            ))),
+            Backend::Mlx { model } => Ok(Self::Mlx(Box::new(crate::gigaam_mlx::GigaAmMlx::load(
+                &model, None,
+            )?))),
         }
     }
 

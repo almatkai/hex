@@ -201,7 +201,7 @@ pub(super) fn reads_vocabulary(ui: &Ui, def: &ModelDefinition) -> bool {
 pub(super) fn size_text(def: &ModelDefinition) -> String {
     match def.runtime {
         ModelRuntime::AppleSpeech => tr("Managed by macOS").into(),
-        ModelRuntime::Gguf(_) => def.size_label(),
+        ModelRuntime::Gguf(_) | ModelRuntime::Mlx(_) => def.size_label(),
     }
 }
 
@@ -230,7 +230,7 @@ pub(super) fn blurb(def: &ModelDefinition) -> &'static str {
         M::UnderdogBark3Pro => tr("Parakeet, tuned for fewer wrong words in English"),
         M::UnderdogBark3Clean => tr("English, with the ums and uhs taken out"),
         M::Nemotron35Asr => tr("Writes while you talk, in 27 languages"),
-        M::GigaAmMultilingual => {
+        M::GigaAmMultilingual | M::GigaAmMultilingualMlx => {
             tr("Russian, Kazakh, Kyrgyz, Uzbek and English, without punctuation")
         }
         M::GigaAmV3 => tr("Russian, with punctuation. A small download"),

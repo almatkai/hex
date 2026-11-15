@@ -1,7 +1,8 @@
 # gigaam_mlx: GigaAM-Multilingual on MLX, built by build.rs through the
 # `cmake` crate with the off-by-default `mlx` feature, aarch64 macOS only.
-# Built and parity-checked on 2026-11-15; see docs/plans/gigaam-mlx.md.
-# CMAKE_OSX_DEPLOYMENT_TARGET >= 26.2 is what turns on MLX's NAX kernels.
+# UNVERIFIED: not yet configured or built on a Mac; see
+# docs/plans/gigaam-mlx.md ("Verification"). ASSUMPTION: a
+# CMAKE_OSX_DEPLOYMENT_TARGET >= 26.2 turns on MLX's NAX (M5) kernels.
 cmake_minimum_required(VERSION 3.24)
 project(gigaam_mlx LANGUAGES C CXX OBJC OBJCXX)
 

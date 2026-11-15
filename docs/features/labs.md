@@ -2889,3 +2889,18 @@ Remote dictation has its own [feature map](remote-dictation.md) and
 before accepting work, uses hashed revocable device credentials, and shares
 the local API's bounded transcription/stream handlers. Windows firewall
 setup is manual; no phone-to-PC inference or QR scan has been verified.
+
+### GigaAM Multilingual (MLX)
+
+`labs.gigaam_mlx` is off by default, audience Everyone, in the Models group,
+and exists only in Apple Silicon builds made with the `mlx` cargo feature
+(`on_this_os` is `cfg!(hex_mlx)`); every other build never lists it and its
+gate reads off whatever the saved toggle says. On, the picker offers
+`gigaam_multilingual_mlx`, the same GigaAM Multilingual weights run by MLX
+(three pinned files, 699 MB), beside the GGUF entry; it is never
+recommended. Turning it off is refused while it is the dictation model. See
+[the MLX plan](../plans/gigaam-mlx.md). Checks:
+`gigaam_mlx_is_off_by_default_and_only_where_mlx_is_built`,
+`gigaam_mlx_is_a_labs_gated_twin_of_the_gguf_entry`,
+`an_mlx_model_installs_verifies_and_removes_as_one_directory`. Passed on
+Windows only; the macOS MLX build has not been compiled or run.

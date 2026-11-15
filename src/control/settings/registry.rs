@@ -452,6 +452,11 @@ pub(super) const KEYS: &[Key] = &[
         "Labs: Parakeet Ultra, Moondream's post-trained Parakeet v3, in the Local transcription picker; stays on while it is the dictation model",
     ),
     key(
+        "labs.gigaam_mlx",
+        Kind::Bool,
+        "Labs: GigaAM Multilingual on Apple's MLX in the Local transcription picker (Apple Silicon builds with MLX only); stays on while it is the dictation model",
+    ),
+    key(
         "labs.standalone_special_keys",
         Kind::Bool,
         "Labs: shortcuts may use Menu, Pause, or Scroll Lock, alone or with modifiers (Linux); off puts such a shortcut back to its default",

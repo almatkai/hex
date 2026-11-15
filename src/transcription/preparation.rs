@@ -180,7 +180,7 @@ fn prepare_selection(
     };
     (|| -> color_eyre::Result<()> {
         let model = crate::transcription::models::validate(selection)?;
-        if matches!(model.runtime, ModelRuntime::Gguf(_)) {
+        if model.runtime.is_downloaded() {
             if installed_only {
                 crate::transcription::models::verify_installed(model, canceled)?;
                 progress.store(model.download_bytes().unwrap_or(0), Ordering::Relaxed);

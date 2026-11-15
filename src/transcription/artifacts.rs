@@ -1,6 +1,6 @@
 //! The catalog's pinned model files and the language lists its entries share.
 
-use super::models::GgufArtifact;
+use super::models::{GgufArtifact, MlxArtifact};
 
 pub(super) const PARAKEET_V3_LANGUAGES: &[&str] = &[
     "bg", "hr", "cs", "da", "nl", "en", "et", "fi", "fr", "de", "el", "hu", "it", "lv", "lt", "mt",
@@ -201,6 +201,46 @@ pub(super) const GIGAAM_MULTILINGUAL_ARTIFACT: GgufArtifact = GgufArtifact {
     sha256: "db9dc408b9afaafbecc062d2b00a33038db86e212098ce1b3732c6e453e2d4c9",
     architecture: "gigaam",
     variant: "gigaam-multilingual-large-ctc",
+};
+// ai-babai's MLX port (MIT) of the same ai-sage/GigaAM-Multilingual
+// `large_ctc` weights (3905cd5), INT8 group-64 weight-only quantization of
+// every Linear (docs/plans/gigaam-mlx.md, "Artifacts And Pins"). Pinned by
+// commit, never by its v0.1.0 tag. Three files in one directory; each is
+// downloaded, size- and SHA-256-checked, and receipted like a GGUF file.
+const GIGAAM_MLX_REPOSITORY: &str = "ai-babai/gigaam-multilingual-mlx-int8-g64";
+const GIGAAM_MLX_REVISION: &str = "03a2921c291e908dcfb29ca4a9a66b31bd304e42";
+pub(super) const GIGAAM_MULTILINGUAL_MLX_ARTIFACT: MlxArtifact = MlxArtifact {
+    directory: "gigaam-multilingual-mlx-int8-g64",
+    // Small files first: the progress counter then tracks the weights.
+    files: &[
+        GgufArtifact {
+            filename: "config.json",
+            revision: GIGAAM_MLX_REVISION,
+            repository: GIGAAM_MLX_REPOSITORY,
+            bytes: 1_149,
+            sha256: "72c544eec78996dc57ed88f8308d735647644e981ec81f46ce945ee1b027a174",
+            architecture: "gigaam_mlx",
+            variant: "int8-g64",
+        },
+        GgufArtifact {
+            filename: "manifest.json",
+            revision: GIGAAM_MLX_REVISION,
+            repository: GIGAAM_MLX_REPOSITORY,
+            bytes: 2_232,
+            sha256: "fdae07e2f5bc8e5a30a5a76edf6d1acb014c609dbeb3df1fa2d7fa67b91e01f4",
+            architecture: "gigaam_mlx",
+            variant: "int8-g64",
+        },
+        GgufArtifact {
+            filename: "model.safetensors",
+            revision: GIGAAM_MLX_REVISION,
+            repository: GIGAAM_MLX_REPOSITORY,
+            bytes: 698_960_933,
+            sha256: "efd4103be5875ba556e6645ce34dd7def2339c7377209c86b7dd5787fb443729",
+            architecture: "gigaam_mlx",
+            variant: "int8-g64",
+        },
+    ],
 };
 // The National Library of Norway's NB-Whisper Medium (Apache-2.0), a
 // Whisper medium fine-tune for Norwegian: NbAiLab's own whisper.cpp Q5_0

@@ -285,15 +285,16 @@ END
 }
 
 /// The `mlx` feature on aarch64 macOS: MLX v0.32.4 and `native/gigaam_mlx`
-/// through CMake, linked statically, with `mlx.metallib` left in OUT_DIR,
-/// which the binary reads (`HEX_MLX_METALLIB`). A developer build for
-/// `hex benchmark-transcription --backend mlx`; scripts/build-app.sh doesn't
-/// bundle the metallib. Without the feature nothing is built or linked.
+/// through CMake, linked statically. `mlx.metallib` stays in OUT_DIR, which
+/// `cargo run` reads (`HEX_MLX_METALLIB`), and is copied beside the binary
+/// in target/<profile>/, where scripts/build-app.sh
+/// (`HEX_CARGO_FEATURES=mlx`) bundles it into Contents/Resources. Without
+/// the feature nothing is built or linked. UNVERIFIED: not yet built on a
+/// Mac (docs/plans/gigaam-mlx.md, "Verification").
 ///
 /// The deployment target is Hex's macOS 15 unless `MACOSX_DEPLOYMENT_TARGET`
-/// says otherwise. MLX compiles its M5 neural-accelerator (NAX) kernels only
-/// for 26.2 or later, which roughly halves long-clip time on an M5
-/// (docs/plans/gigaam-mlx.md, "Results").
+/// says otherwise. ASSUMPTION to check on the first build: MLX compiles its
+/// M5 neural-accelerator (NAX) kernels only for a 26.2+ target.
 #[cfg(feature = "mlx")]
 fn compile_gigaam_mlx() {
     if std::env::var("CARGO_CFG_TARGET_ARCH").as_deref() != Ok("aarch64") {
@@ -324,6 +325,12 @@ fn compile_gigaam_mlx() {
         println!("cargo:rustc-link-lib=framework={framework}");
     }
     println!("cargo:rustc-env=HEX_MLX_METALLIB={}", metallib.display());
+    // OUT_DIR is target/<profile>/build/hex-<hash>/out.
+    let out_dir = std::path::PathBuf::from(std::env::var("OUT_DIR").expect("OUT_DIR"));
+    if let Some(profile_dir) = out_dir.ancestors().nth(3) {
+        std::fs::copy(&metallib, profile_dir.join("mlx.metallib"))
+            .expect("copy mlx.metallib beside the binary");
+    }
     println!("cargo::rustc-cfg=hex_mlx");
 }
 

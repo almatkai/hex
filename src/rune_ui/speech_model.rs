@@ -71,7 +71,7 @@ pub(super) fn setting(
     for model in transcription_models::all_models() {
         let fallback = ui.settings.transcription_for_model(model.id).language;
         if !model.available()
-            || !matches!(model.runtime, ModelRuntime::Gguf(_))
+            || !model.runtime.is_downloaded()
             || !ui.picker.installed(model, &fallback)
         {
             continue;

@@ -920,9 +920,7 @@ pub(crate) fn held<'a>(
     selection: &crate::transcription::models::TranscriptionSelection,
 ) -> Option<&'a mut HeldModel> {
     #[cfg(target_os = "macos")]
-    let model = model
-        .active()
-        .filter(|model| matches!(model, crate::transcription::Transcriber::Gguf(_)))?;
+    let model = model.active().filter(|model| model.in_process())?;
     model.matches_selection(selection).then_some(model)
 }
 

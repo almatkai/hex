@@ -92,6 +92,9 @@ impl Feature {
             Self::ParakeetUltra => {
                 "Offer Parakeet Ultra, Moondream's post-trained Parakeet v3, in the Local transcription picker"
             }
+            Self::GigaAmMlx => {
+                "Offer GigaAM Multilingual on Apple's MLX, beside its GGUF build, in the Local transcription picker"
+            }
             Self::StandaloneSpecialKeys if cfg!(target_os = "windows") => {
                 "Use Insert, Home, End, Page Up, or Page Down alone as a shortcut"
             }

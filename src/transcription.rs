@@ -56,6 +56,9 @@ pub(crate) const UNIFIED_ENGLISH_TRAILING_SILENCE_SAMPLES: usize = 6_400;
 #[cfg(target_os = "macos")]
 pub enum Transcriber {
     Gguf(Box<Parakeet>),
+    /// GigaAM Multilingual on MLX (Labs; Apple Silicon builds with `mlx`).
+    #[cfg(hex_mlx)]
+    Mlx(Box<crate::gigaam_mlx::Loaded>),
     AppleSpeech(AppleSpeech),
 }
 
@@ -77,6 +80,14 @@ impl Transcriber {
             ModelRuntime::Gguf(_) => Parakeet::load_selection(selection)
                 .map(Box::new)
                 .map(Self::Gguf),
+            #[cfg(hex_mlx)]
+            ModelRuntime::Mlx(_) => crate::gigaam_mlx::Loaded::load_selection(selection)
+                .map(Box::new)
+                .map(Self::Mlx),
+            #[cfg(not(hex_mlx))]
+            ModelRuntime::Mlx(_) => {
+                color_eyre::eyre::bail!("this build of Hex has no MLX (the `mlx` cargo feature)")
+            }
             ModelRuntime::AppleSpeech => AppleSpeech::load(selection).map(Self::AppleSpeech),
         }
     }
@@ -84,15 +95,31 @@ impl Transcriber {
     pub fn matches_selection(&self, selection: &TranscriptionSelection) -> bool {
         match self {
             Self::Gguf(model) => model.matches_selection(selection),
+            #[cfg(hex_mlx)]
+            Self::Mlx(model) => model.matches_selection(selection),
             Self::AppleSpeech(model) => model.matches_selection(selection),
         }
     }
 
+    /// Whether the model runs inside Hex's process (GGUF or MLX), so the
+    /// engine's copy can serve meetings and host clips instead of a second.
+    pub(crate) fn in_process(&self) -> bool {
+        match self {
+            Self::Gguf(_) => true,
+            #[cfg(hex_mlx)]
+            Self::Mlx(_) => true,
+            Self::AppleSpeech(_) => false,
+        }
+    }
+
     /// Brings an idle GGUF model's weights back before audio arrives (see
-    /// [`Parakeet::prewarm`]). Apple Speech has no weights of Hex's to warm.
+    /// [`Parakeet::prewarm`]). Apple Speech has no weights of Hex's to warm,
+    /// and MLX loads prewarmed.
     pub fn prewarm(&mut self) -> Result<()> {
         match self {
             Self::Gguf(model) => model.prewarm(),
+            #[cfg(hex_mlx)]
+            Self::Mlx(_) => Ok(()),
             Self::AppleSpeech(_) => Ok(()),
         }
     }
@@ -104,6 +131,11 @@ impl Transcriber {
             Self::Gguf(model) => {
                 pad_gguf_samples(&mut samples, model.model_id());
                 model.transcribe(&samples)
+            }
+            #[cfg(hex_mlx)]
+            Self::Mlx(model) => {
+                crate::dictation::pad_for_parakeet(&mut samples);
+                model.transcribe(&samples).map(|result| result.text)
             }
             Self::AppleSpeech(model) => model.transcribe(&samples).map(|result| result.text),
         }
@@ -139,6 +171,11 @@ impl Transcriber {
                             .collect(),
                     })
             }
+            #[cfg(hex_mlx)]
+            Self::Mlx(model) => {
+                crate::dictation::pad_for_parakeet(&mut samples);
+                model.transcribe(&samples)
+            }
             Self::AppleSpeech(model) => model.transcribe(&samples),
         }
     }
@@ -151,16 +188,25 @@ impl Transcriber {
                 pad_gguf_samples(&mut samples, model.model_id());
                 model.transcribe_timed(&samples)
             }
+            // GigaAM's CTC emissions give word times; its gigaam-stt chunking
+            // runs inside the native library.
+            #[cfg(hex_mlx)]
+            Self::Mlx(model) => {
+                crate::dictation::pad_for_parakeet(&mut samples);
+                model.transcribe(&samples)
+            }
             // Apple Speech segments the whole clip itself.
             Self::AppleSpeech(model) => model.transcribe(&samples),
         }
     }
 
     /// The finest native timings this backend gives: Apple Speech segments,
-    /// and a GGUF model what its metadata advertises.
+    /// MLX's CTC words, and a GGUF model what its metadata advertises.
     pub fn timestamps(&self) -> crate::transcription::transcript::TimestampLevel {
         match self {
             Self::Gguf(model) => model.timestamps(),
+            #[cfg(hex_mlx)]
+            Self::Mlx(_) => crate::transcription::transcript::TimestampLevel::Word,
             Self::AppleSpeech(_) => crate::transcription::transcript::TimestampLevel::Segment,
         }
     }

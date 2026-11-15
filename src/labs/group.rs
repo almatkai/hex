@@ -125,6 +125,7 @@ impl Feature {
             | Self::ModelInPlace
             | Self::PickerDownloaded
             | Self::ParakeetUltra
+            | Self::GigaAmMlx
             | Self::TranscribeFiles => Group::Models,
         }
     }

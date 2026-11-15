@@ -340,8 +340,7 @@ fn model_row(ui: &Ui, p: Paint, entry: &Entry, language: &str) -> El {
 /// used in place; the first press arms it.
 fn delete_button(ui: &Ui, p: Paint, entry: &Entry, free: bool) -> Option<El> {
     let def = entry.def;
-    let deletable =
-        entry.state == State::Downloaded && free && matches!(def.runtime, ModelRuntime::Gguf(_));
+    let deletable = entry.state == State::Downloaded && free && def.runtime.is_downloaded();
     if !deletable {
         return None;
     }

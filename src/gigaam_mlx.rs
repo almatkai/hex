@@ -3,9 +3,12 @@
 //!
 //! Built only with the off-by-default `mlx` cargo feature on Apple Silicon
 //! macOS (`cfg(hex_mlx)`, set by build.rs after it builds MLX and
-//! `native/gigaam_mlx`). Today its one caller is
-//! `hex benchmark-transcription --backend mlx`; no model in the catalog and
-//! no `Transcriber` uses it (docs/plans/gigaam-mlx.md, "Results").
+//! `native/gigaam_mlx`). Callers: `transcription::Transcriber::Mlx` (the
+//! catalog's `gigaam_multilingual_mlx`, behind Labs › GigaAM Multilingual
+//! (MLX)) and `hex benchmark-transcription --backend mlx`.
+//!
+//! UNVERIFIED: written on Windows; nothing here has been compiled against
+//! MLX or run on a Mac yet (docs/plans/gigaam-mlx.md, "Verification").
 //!
 //! Rust owns policy: the pinned artifact, its download and SHA-256 receipts
 //! (`transcription::models`), parsing `config.json` and `manifest.json`, and
@@ -20,6 +23,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use color_eyre::eyre::{Result, bail, eyre};
 use serde::Deserialize;
 
+use crate::transcription::models::{self, TranscriptionSelection};
 use crate::transcription::transcript::{Transcript, TranscriptSegment};
 
 const ABI_VERSION: u32 = 1;
@@ -272,7 +276,8 @@ impl GigaAmMlx {
     /// model.safetensors). `weights_sha256` is `None` when Hex's receipt
     /// already vouches for the file; the parity tool passes the pin.
     pub fn load(model_dir: &Path, weights_sha256: Option<&str>) -> Result<Self> {
-        let config: ModelConfig = serde_json::from_slice(&fs::read(model_dir.join("config.json"))?)?;
+        let config: ModelConfig =
+            serde_json::from_slice(&fs::read(model_dir.join("config.json"))?)?;
         config.validate()?;
         let manifest: Manifest =
             serde_json::from_slice(&fs::read(model_dir.join("manifest.json"))?)?;
@@ -306,7 +311,9 @@ impl GigaAmMlx {
             vocabulary_count: u32::try_from(pointers.len())?,
         };
         let dir = path_cstring(model_dir)?;
-        let metallib = metallib_path().map(|path| path_cstring(&path)).transpose()?;
+        let metallib = metallib_path()
+            .map(|path| path_cstring(&path))
+            .transpose()?;
         let sha = weights_sha256.map(CString::new).transpose()?;
         let options = RawLoadOptions {
             model_dir: dir.as_ptr(),
@@ -457,6 +464,40 @@ impl Drop for GigaAmMlx {
     }
 }
 
+/// The catalog's GigaAM Multilingual (MLX) as the transcription engine holds
+/// it (`transcription::Transcriber::Mlx`), with the selection it serves.
+pub struct Loaded {
+    model: GigaAmMlx,
+    selection: TranscriptionSelection,
+}
+
+impl Loaded {
+    /// Loads the installed, verified artifact directory. The caller has
+    /// validated the selection (and with it Labs › GigaAM Multilingual (MLX)).
+    pub fn load_selection(selection: &TranscriptionSelection) -> Result<Self> {
+        let definition = models::definition(selection.model);
+        if !models::is_installed(definition, &selection.language) {
+            bail!("{} is not installed", definition.name);
+        }
+        let directory = models::verify_installed(definition, &AtomicBool::new(false))?;
+        Ok(Self {
+            model: GigaAmMlx::load(&directory, None)?,
+            selection: selection.clone(),
+        })
+    }
+
+    /// The model takes no language input, so a language change keeps it.
+    pub fn matches_selection(&self, selection: &TranscriptionSelection) -> bool {
+        self.selection.model == selection.model
+    }
+
+    /// A padded 16 kHz clip, with CTC word times. Nothing cancels it yet:
+    /// the engine has no cancel for a whole-clip run (docs/plans/gigaam-mlx.md).
+    pub fn transcribe(&mut self, samples: &[f32]) -> Result<Transcript> {
+        self.model.transcribe(samples, &AtomicBool::new(false))
+    }
+}
+
 /// `Hex.app/Contents/Resources/mlx.metallib` beside a bundled executable,
 /// else the one build.rs left in OUT_DIR for `cargo run`.
 fn metallib_path() -> Option<PathBuf> {
@@ -543,7 +584,7 @@ mod tests {
     }
 
     /// Phase 1 parity with `scripts/gigaam-mlx-reference.py`'s dumps, on a
-    /// Mac with the artifact (docs/plans/gigaam-mlx.md, "Results"):
+    /// Mac with the artifact (docs/plans/gigaam-mlx.md, "Verification", Phase 1):
     ///
     /// ```sh
     /// HEX_GIGAAM_MLX_MODEL=<artifact dir> HEX_GIGAAM_MLX_REFERENCE=<--out dir> \
@@ -578,13 +619,25 @@ mod tests {
             // One pass over the whole clip: parity.py's own thresholds.
             let (frames, actual) = model.log_probs(&samples).unwrap();
             assert_eq!(actual.len(), expected.len(), "{stem}: log-prob shape");
-            let dot = actual.iter().zip(&expected).map(|(a, b)| f64::from(a * b)).sum::<f64>();
+            let dot = actual
+                .iter()
+                .zip(&expected)
+                .map(|(a, b)| f64::from(a * b))
+                .sum::<f64>();
             let norm = |values: &[f32]| values.iter().map(|v| f64::from(v * v)).sum::<f64>().sqrt();
             let cosine = dot / (norm(&actual) * norm(&expected));
-            let error = actual.iter().zip(&expected).map(|(a, b)| f64::from((a - b).abs())).sum::<f64>();
+            let error = actual
+                .iter()
+                .zip(&expected)
+                .map(|(a, b)| f64::from((a - b).abs()))
+                .sum::<f64>();
             let scale = expected.iter().map(|b| f64::from(b.abs())).sum::<f64>();
             assert!(cosine >= 0.9999, "{stem}: cosine {cosine}");
-            assert!(error / scale <= 1e-3, "{stem}: normalised MAE {}", error / scale);
+            assert!(
+                error / scale <= 1e-3,
+                "{stem}: normalised MAE {}",
+                error / scale
+            );
             let tokens = greedy(&actual, actual.len() / frames);
             let expected_tokens = record["single_pass"]["token_ids"]
                 .as_array()
@@ -596,14 +649,26 @@ mod tests {
 
             // Chunked (20 s / 2 s): same text, word times within a millisecond.
             let transcript = model.transcribe(&samples, &AtomicBool::new(false)).unwrap();
-            assert_eq!(transcript.text, record["chunked"]["text"].as_str().unwrap(), "{stem}");
+            assert_eq!(
+                transcript.text,
+                record["chunked"]["text"].as_str().unwrap(),
+                "{stem}"
+            );
             let words = record["chunked"]["words"].as_array().unwrap();
             assert_eq!(transcript.words.len(), words.len(), "{stem}: words");
             for (word, expected) in transcript.words.iter().zip(words) {
                 let ms = |key: &str| (expected[key].as_f64().unwrap() * 1_000.0).round() as i64;
                 assert_eq!(word.text, expected["text"].as_str().unwrap(), "{stem}");
-                assert!((word.start_ms - ms("start")).abs() <= 1, "{stem}: {}", word.text);
-                assert!((word.end_ms - ms("end")).abs() <= 1, "{stem}: {}", word.text);
+                assert!(
+                    (word.start_ms - ms("start")).abs() <= 1,
+                    "{stem}: {}",
+                    word.text
+                );
+                assert!(
+                    (word.end_ms - ms("end")).abs() <= 1,
+                    "{stem}: {}",
+                    word.text
+                );
             }
             checked += 1;
         }
@@ -634,12 +699,18 @@ mod tests {
         assert_eq!(&bytes[..6], b"\x93NUMPY", "{}", path.display());
         let (length, start) = match bytes[6] {
             1 => (usize::from(u16::from_le_bytes([bytes[8], bytes[9]])), 10),
-            _ => (u32::from_le_bytes(bytes[8..12].try_into().unwrap()) as usize, 12),
+            _ => (
+                u32::from_le_bytes(bytes[8..12].try_into().unwrap()) as usize,
+                12,
+            ),
         };
         let header = std::str::from_utf8(&bytes[start..start + length]).unwrap();
         assert!(header.contains("'descr': '<f4'") && header.contains("'fortran_order': False"));
         let (values, rest) = bytes[start + length..].as_chunks::<4>();
         assert!(rest.is_empty(), "{}: truncated", path.display());
-        values.iter().map(|value| f32::from_le_bytes(*value)).collect()
+        values
+            .iter()
+            .map(|value| f32::from_le_bytes(*value))
+            .collect()
     }
 }
