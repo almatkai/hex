@@ -64,13 +64,31 @@ pub(crate) fn enabled() -> Vec<InputSource> {
             InputSource {
                 id: id(layout),
                 name,
-                languages: locale.into_iter().collect(),
+                languages: layout_languages(bits)
+                    .into_iter()
+                    .filter_map(locale_name)
+                    .collect(),
             }
         })
         .collect();
     sources.sort_by(|a, b| a.name.cmp(&b.name).then(a.id.cmp(&b.id)));
     sources.dedup_by(|a, b| a.id == b.id);
     sources
+}
+
+/// The language IDs a layout is typed in, most specific first. The low word
+/// is the language the layout was added under; a plain keyboard's high word
+/// is the keyboard's own language, which says more about what is dictated:
+/// the Kazakh keyboard added under Russian (`043F0419`) types Kazakh.
+fn layout_languages(layout: u32) -> Vec<u32> {
+    let language = layout & 0xFFFF;
+    let keyboard = layout >> 16;
+    let mut languages = Vec::with_capacity(2);
+    if keyboard & 0xF000 == 0 && keyboard != 0 && keyboard != language {
+        languages.push(keyboard);
+    }
+    languages.push(language);
+    languages
 }
 
 /// BCP 47 for a language ID, `ru-RU`.
@@ -148,5 +166,28 @@ impl Watcher {
             self.last = Some(current.clone());
             Some(current)
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_keyboard_added_under_another_language_types_its_own_first() {
+        // Kazakh keyboard under Russian, plain Russian, US, and a variant
+        // (Dvorak, 0xF002) and an IME (0xE0010411) whose high word is no language.
+        assert_eq!(layout_languages(0x043F_0419), [0x043F, 0x0419]);
+        assert_eq!(layout_languages(0x0419_0419), [0x0419]);
+        assert_eq!(layout_languages(0x0409_0409), [0x0409]);
+        assert_eq!(layout_languages(0xF002_0409), [0x0409]);
+        assert_eq!(layout_languages(0xE001_0411), [0x0411]);
+        assert_eq!(
+            layout_languages(0x043F_0419)
+                .into_iter()
+                .filter_map(locale_name)
+                .collect::<Vec<_>>(),
+            ["kk-KZ", "ru-RU"]
+        );
     }
 }
