@@ -87,6 +87,17 @@ cargo run --release --features onnx-benchmark -- \
   > perf/transcription-corpus/transcribe-rs-onnx-int8.jsonl
 ```
 
+On an Apple Silicon Mac, the opt-in `mlx` feature adds GigaAM Multilingual on
+MLX; `--model` is the artifact directory (config.json, manifest.json,
+model.safetensors), and the summary gains `mlx_memory`. Results and the NAX
+deployment-target caveat are in `docs/plans/gigaam-mlx.md`:
+
+```sh
+cargo run --release --features mlx -- \
+  benchmark-transcription manifest.json \
+  --backend mlx --model <gigaam-multilingual-mlx-int8-g64 directory>
+```
+
 ## Provisional M2 Max Comparison
 
 On 2026-07-16, ten clips cut from existing local microphone recordings were

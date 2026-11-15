@@ -1,12 +1,11 @@
 //! GigaAM-Multilingual on MLX (Apple Silicon): the safe Rust side of
 //! `native/gigaam_mlx`.
 //!
-//! SKELETON, UNTESTED, NOT IN THE MODULE TREE. Nothing declares
-//! `mod gigaam_mlx;` yet, so this file does not build with Hex today. Wiring
-//! it in (docs/plans/gigaam-mlx.md, "Integration") means:
-//! `#[cfg(all(target_os = "macos", target_arch = "aarch64"))] mod gigaam_mlx;`
-//! in `main.rs`, `compile_gigaam_mlx()` in `build.rs`, and a
-//! `Transcriber::Mlx` variant in `transcription.rs`.
+//! Built only with the off-by-default `mlx` cargo feature on Apple Silicon
+//! macOS (`cfg(hex_mlx)`, set by build.rs after it builds MLX and
+//! `native/gigaam_mlx`). Today its one caller is
+//! `hex benchmark-transcription --backend mlx`; no model in the catalog and
+//! no `Transcriber` uses it (docs/plans/gigaam-mlx.md, "Results").
 //!
 //! Rust owns policy: the pinned artifact, its download and SHA-256 receipts
 //! (`transcription::models`), parsing `config.json` and `manifest.json`, and
@@ -106,7 +105,6 @@ struct RawResult {
 }
 
 unsafe extern "C" {
-    fn gigaam_mlx_metal_available() -> i32;
     fn gigaam_mlx_load(
         config: *const RawConfig,
         options: *const RawLoadOptions,
@@ -121,6 +119,7 @@ unsafe extern "C" {
         status: *mut Status,
         error: *mut *mut c_char,
     ) -> *mut RawResult;
+    #[cfg_attr(not(test), expect(dead_code, reason = "the parity test's"))]
     fn gigaam_mlx_log_probs(
         session: *mut RawSession,
         samples: *const f32,
@@ -146,8 +145,6 @@ unsafe extern "C" {
 /// The artifact's `config.json` (gigaam_multilingual_mlx.config.ModelConfig).
 #[derive(Clone, Debug, Deserialize)]
 pub struct ModelConfig {
-    pub model_name: String,
-    pub source_revision: String,
     pub sample_rate: u32,
     pub features: u32,
     pub win_length: u32,
@@ -200,14 +197,13 @@ impl ModelConfig {
     /// The pinned artifacts' config.json is byte-identical across FP16 and
     /// int8-g64 (sha256 72c544ee...a174), so this is belt and braces.
     fn validate(&self) -> Result<()> {
-        let expected = (16_000, 64, 320, 160, 320, false, 24, 1024, 5, 4, 4, 16, 5000, 5);
-        let actual = (
+        const EXPECTED: [u32; 13] = [16_000, 64, 320, 160, 320, 24, 1024, 5, 4, 4, 16, 5000, 5];
+        let actual = [
             self.sample_rate,
             self.features,
             self.win_length,
             self.hop_length,
             self.n_fft,
-            self.center,
             self.n_layers,
             self.d_model,
             self.subs_kernel_size,
@@ -216,9 +212,12 @@ impl ModelConfig {
             self.n_heads,
             self.pos_emb_base,
             self.conv_kernel_size,
-        );
-        if actual != expected {
-            bail!("unsupported GigaAM MLX configuration {actual:?}");
+        ];
+        if actual != EXPECTED || self.center {
+            bail!(
+                "unsupported GigaAM MLX configuration {actual:?} (center {})",
+                self.center
+            );
         }
         if self.num_classes as usize != self.vocabulary.len() + 1 {
             bail!("GigaAM MLX vocabulary does not match its class count");
@@ -260,6 +259,7 @@ fn quantization(manifest: &Manifest) -> Result<(u32, u32)> {
 
 pub struct GigaAmMlx {
     session: NonNull<RawSession>,
+    #[cfg_attr(not(test), expect(dead_code, reason = "the parity test's"))]
     vocabulary: Vec<String>,
 }
 
@@ -268,10 +268,6 @@ pub struct GigaAmMlx {
 unsafe impl Send for GigaAmMlx {}
 
 impl GigaAmMlx {
-    pub fn metal_available() -> bool {
-        unsafe { gigaam_mlx_metal_available() != 0 }
-    }
-
     /// Loads a verified artifact directory (config.json, manifest.json,
     /// model.safetensors). `weights_sha256` is `None` when Hex's receipt
     /// already vouches for the file; the parity tool passes the pin.
@@ -408,6 +404,7 @@ impl GigaAmMlx {
 
     /// Parity: float32 CTC log-probabilities over the whole input, one
     /// pass, `frames x (vocabulary + 1)` row-major.
+    #[cfg_attr(not(test), expect(dead_code, reason = "the parity test's"))]
     pub fn log_probs(&mut self, samples: &[f32]) -> Result<(usize, Vec<f32>)> {
         let classes = self.vocabulary.len() + 1;
         let mut frames = 0;
@@ -444,10 +441,6 @@ impl GigaAmMlx {
             return Err(take_error(status, error));
         }
         Ok((frames, out))
-    }
-
-    pub fn vocabulary(&self) -> &[String] {
-        &self.vocabulary
     }
 
     /// MLX allocator bytes: (active, peak, cache), process-wide.
@@ -547,5 +540,107 @@ mod tests {
         ))
         .unwrap();
         assert_eq!(quantization(&manifest).unwrap(), (0, 0));
+    }
+
+    /// Phase 1 parity with `scripts/gigaam-mlx-reference.py`'s dumps, on a
+    /// Mac with the artifact (docs/plans/gigaam-mlx.md, "Results"):
+    ///
+    /// ```sh
+    /// HEX_GIGAAM_MLX_MODEL=<artifact dir> HEX_GIGAAM_MLX_REFERENCE=<--out dir> \
+    /// HEX_GIGAAM_MLX_CLIPS=<the same WAVs> \
+    /// cargo test --release --features mlx --bin hex gigaam_mlx -- --ignored
+    /// ```
+    #[test]
+    #[ignore = "needs Apple Silicon, the MLX artifact, and reference dumps"]
+    fn matches_the_python_reference() {
+        let var = |name: &str| {
+            PathBuf::from(std::env::var_os(name).unwrap_or_else(|| panic!("set {name}")))
+        };
+        let reference = var("HEX_GIGAAM_MLX_REFERENCE");
+        let mut model = GigaAmMlx::load(&var("HEX_GIGAAM_MLX_MODEL"), None).unwrap();
+        let mut checked = 0;
+        for entry in fs::read_dir(var("HEX_GIGAAM_MLX_CLIPS")).unwrap() {
+            let path = entry.unwrap().path();
+            if path.extension().is_none_or(|extension| extension != "wav") {
+                continue;
+            }
+            let stem = path.file_stem().unwrap().to_str().unwrap();
+            let record: serde_json::Value =
+                serde_json::from_slice(&fs::read(reference.join(format!("{stem}.json"))).unwrap())
+                    .unwrap();
+            let expected = read_npy_f32(&reference.join(format!("{stem}.logprobs.npy")));
+            let samples = hound::WavReader::open(&path)
+                .unwrap()
+                .samples::<i16>()
+                .map(|sample| f32::from(sample.unwrap()) / 32_768.0)
+                .collect::<Vec<_>>();
+
+            // One pass over the whole clip: parity.py's own thresholds.
+            let (frames, actual) = model.log_probs(&samples).unwrap();
+            assert_eq!(actual.len(), expected.len(), "{stem}: log-prob shape");
+            let dot = actual.iter().zip(&expected).map(|(a, b)| f64::from(a * b)).sum::<f64>();
+            let norm = |values: &[f32]| values.iter().map(|v| f64::from(v * v)).sum::<f64>().sqrt();
+            let cosine = dot / (norm(&actual) * norm(&expected));
+            let error = actual.iter().zip(&expected).map(|(a, b)| f64::from((a - b).abs())).sum::<f64>();
+            let scale = expected.iter().map(|b| f64::from(b.abs())).sum::<f64>();
+            assert!(cosine >= 0.9999, "{stem}: cosine {cosine}");
+            assert!(error / scale <= 1e-3, "{stem}: normalised MAE {}", error / scale);
+            let tokens = greedy(&actual, actual.len() / frames);
+            let expected_tokens = record["single_pass"]["token_ids"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|id| u32::try_from(id.as_u64().unwrap()).unwrap())
+                .collect::<Vec<_>>();
+            assert_eq!(tokens, expected_tokens, "{stem}: single-pass tokens");
+
+            // Chunked (20 s / 2 s): same text, word times within a millisecond.
+            let transcript = model.transcribe(&samples, &AtomicBool::new(false)).unwrap();
+            assert_eq!(transcript.text, record["chunked"]["text"].as_str().unwrap(), "{stem}");
+            let words = record["chunked"]["words"].as_array().unwrap();
+            assert_eq!(transcript.words.len(), words.len(), "{stem}: words");
+            for (word, expected) in transcript.words.iter().zip(words) {
+                let ms = |key: &str| (expected[key].as_f64().unwrap() * 1_000.0).round() as i64;
+                assert_eq!(word.text, expected["text"].as_str().unwrap(), "{stem}");
+                assert!((word.start_ms - ms("start")).abs() <= 1, "{stem}: {}", word.text);
+                assert!((word.end_ms - ms("end")).abs() <= 1, "{stem}: {}", word.text);
+            }
+            checked += 1;
+        }
+        assert!(checked > 0, "no WAVs in HEX_GIGAAM_MLX_CLIPS");
+    }
+
+    /// CTC greedy decode: argmax per frame, repeats collapsed, blank (the
+    /// last class) dropped.
+    fn greedy(log_probs: &[f32], classes: usize) -> Vec<u32> {
+        let blank = classes - 1;
+        let mut previous = blank;
+        let mut tokens = Vec::new();
+        for frame in log_probs.chunks_exact(classes) {
+            let best = (0..classes)
+                .max_by(|&a, &b| frame[a].total_cmp(&frame[b]))
+                .unwrap();
+            if best != blank && best != previous {
+                tokens.push(u32::try_from(best).unwrap());
+            }
+            previous = best;
+        }
+        tokens
+    }
+
+    /// A little-endian float32 C-order `.npy` (format 1.0–3.0).
+    fn read_npy_f32(path: &Path) -> Vec<f32> {
+        let bytes = fs::read(path).unwrap();
+        assert_eq!(&bytes[..6], b"\x93NUMPY", "{}", path.display());
+        let (length, start) = match bytes[6] {
+            1 => (usize::from(u16::from_le_bytes([bytes[8], bytes[9]])), 10),
+            _ => (u32::from_le_bytes(bytes[8..12].try_into().unwrap()) as usize, 12),
+        };
+        let header = std::str::from_utf8(&bytes[start..start + length]).unwrap();
+        assert!(header.contains("'descr': '<f4'") && header.contains("'fortran_order': False"));
+        bytes[start + length..]
+            .chunks_exact(4)
+            .map(|value| f32::from_le_bytes(value.try_into().unwrap()))
+            .collect()
     }
 }

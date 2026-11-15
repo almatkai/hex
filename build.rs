@@ -17,6 +17,9 @@ fn main() {
     // `hex_capture`: the `capture` experiment's code, in every macOS, Linux,
     // and Windows build (`scrawl-capture` is their dependency).
     println!("cargo::rustc-check-cfg=cfg(hex_capture)");
+    // `hex_mlx`: GigaAM Multilingual on MLX (docs/plans/gigaam-mlx.md), only
+    // with the off-by-default `mlx` feature on Apple Silicon macOS.
+    println!("cargo::rustc-check-cfg=cfg(hex_mlx)");
     if matches!(
         std::env::var("CARGO_CFG_TARGET_OS").as_deref(),
         Ok("macos" | "linux" | "windows")
@@ -77,6 +80,7 @@ fn main() {
     compile_swift_bridge("calendar", "HEXCalendarBridge", &[]);
     println!("cargo:rustc-link-lib=framework=EventKit");
     compile_permission_guide();
+    compile_gigaam_mlx();
     println!("cargo:rustc-link-arg=-Wl,-rpath,/usr/lib/swift");
     for runtime in ["swift-5.5/macosx", "swift/macosx"] {
         let swift_runtime = format!(
@@ -279,6 +283,52 @@ END
         .manifest_optional()
         .expect("compile the Windows resources");
 }
+
+/// The `mlx` feature on aarch64 macOS: MLX v0.32.4 and `native/gigaam_mlx`
+/// through CMake, linked statically, with `mlx.metallib` left in OUT_DIR,
+/// which the binary reads (`HEX_MLX_METALLIB`). A developer build for
+/// `hex benchmark-transcription --backend mlx`; scripts/build-app.sh doesn't
+/// bundle the metallib. Without the feature nothing is built or linked.
+///
+/// The deployment target is Hex's macOS 15 unless `MACOSX_DEPLOYMENT_TARGET`
+/// says otherwise. MLX compiles its M5 neural-accelerator (NAX) kernels only
+/// for 26.2 or later, which roughly halves long-clip time on an M5
+/// (docs/plans/gigaam-mlx.md, "Results").
+#[cfg(feature = "mlx")]
+fn compile_gigaam_mlx() {
+    if std::env::var("CARGO_CFG_TARGET_ARCH").as_deref() != Ok("aarch64") {
+        println!("cargo:warning=the mlx feature needs Apple Silicon; GigaAM MLX is not built");
+        return;
+    }
+    println!("cargo:rerun-if-changed=native/gigaam_mlx");
+    println!("cargo:rerun-if-env-changed=MACOSX_DEPLOYMENT_TARGET");
+    let deployment_target =
+        std::env::var("MACOSX_DEPLOYMENT_TARGET").unwrap_or_else(|_| "15.0".to_owned());
+    let install = cmake::Config::new("native/gigaam_mlx")
+        .define("CMAKE_OSX_DEPLOYMENT_TARGET", &deployment_target)
+        .profile("Release")
+        .build();
+    let lib = install.join("lib");
+    let metallib = lib.join("mlx.metallib");
+    assert!(
+        metallib.is_file(),
+        "MLX did not build {}; is Xcode's Metal toolchain installed? \
+         (xcodebuild -downloadComponent MetalToolchain)",
+        metallib.display()
+    );
+    println!("cargo:rustc-link-search=native={}", lib.display());
+    println!("cargo:rustc-link-lib=static=gigaam_mlx");
+    println!("cargo:rustc-link-lib=static=mlx");
+    println!("cargo:rustc-link-lib=c++");
+    for framework in ["Metal", "Foundation", "QuartzCore", "Accelerate"] {
+        println!("cargo:rustc-link-lib=framework={framework}");
+    }
+    println!("cargo:rustc-env=HEX_MLX_METALLIB={}", metallib.display());
+    println!("cargo::rustc-cfg=hex_mlx");
+}
+
+#[cfg(not(feature = "mlx"))]
+fn compile_gigaam_mlx() {}
 
 fn compile_permission_guide() {
     println!("cargo:rerun-if-changed=native/permission_guide.m");

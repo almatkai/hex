@@ -2256,6 +2256,7 @@ dependencies = [
  "capture-core",
  "cc",
  "clap",
+ "cmake",
  "color-eyre",
  "core-graphics-types 0.1.3",
  "cpal",
