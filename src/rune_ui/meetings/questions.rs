@@ -65,44 +65,6 @@ impl Questions {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn meeting_ask_cancels_on_selection_change_and_discards_late_answers() {
-        let mut state = Questions::default();
-        state.meeting_id = Some("one".into());
-        let (tx, rx) = mpsc::channel();
-        state.pending = Some(rx);
-        let cancel = state.cancel.clone();
-        assert!(state.poll(true, Some("two")));
-        assert!(cancel.load(Ordering::Acquire));
-        assert!(tx.send(Err("late answer".into())).is_err());
-        assert!(state.answer.is_none());
-    }
-
-    #[test]
-    fn meeting_ask_delivers_answers_and_cancels_when_the_feature_is_disabled() {
-        let mut state = Questions::default();
-        state.meeting_id = Some("one".into());
-        let (tx, rx) = mpsc::channel();
-        state.pending = Some(rx);
-        tx.send(Ok(crate::meeting::ask::Answer {
-            version: 1,
-            meeting_id: "one".into(),
-            answer: "Grounded [00:12]".into(),
-            model: "test".into(),
-            excerpted: false,
-        }))
-        .unwrap();
-        assert!(state.poll(true, Some("one")));
-        assert_eq!(state.answer.as_deref(), Some("Grounded [00:12]"));
-        assert!(state.poll(false, Some("one")));
-        assert!(state.answer.is_none());
-    }
-}
-
 pub(in crate::rune_ui) fn poll(ui: &mut Ui) -> bool {
     if ui.is_fixture() {
         return false;
@@ -227,4 +189,42 @@ pub(super) fn panel(ui: &Ui, p: Paint) -> Option<El> {
         );
     }
     Some(panel)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn meeting_ask_cancels_on_selection_change_and_discards_late_answers() {
+        let mut state = Questions::default();
+        state.meeting_id = Some("one".into());
+        let (tx, rx) = mpsc::channel();
+        state.pending = Some(rx);
+        let cancel = state.cancel.clone();
+        assert!(state.poll(true, Some("two")));
+        assert!(cancel.load(Ordering::Acquire));
+        assert!(tx.send(Err("late answer".into())).is_err());
+        assert!(state.answer.is_none());
+    }
+
+    #[test]
+    fn meeting_ask_delivers_answers_and_cancels_when_the_feature_is_disabled() {
+        let mut state = Questions::default();
+        state.meeting_id = Some("one".into());
+        let (tx, rx) = mpsc::channel();
+        state.pending = Some(rx);
+        tx.send(Ok(crate::meeting::ask::Answer {
+            version: 1,
+            meeting_id: "one".into(),
+            answer: "Grounded [00:12]".into(),
+            model: "test".into(),
+            excerpted: false,
+        }))
+        .unwrap();
+        assert!(state.poll(true, Some("one")));
+        assert_eq!(state.answer.as_deref(), Some("Grounded [00:12]"));
+        assert!(state.poll(false, Some("one")));
+        assert!(state.answer.is_none());
+    }
 }

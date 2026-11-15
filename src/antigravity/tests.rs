@@ -651,7 +651,7 @@ fn http_deadline_and_body_limit_are_enforced() {
     let server = std::thread::spawn(move || {
         let (mut stream, _) = listener.accept().unwrap();
         let mut buffer = [0; 1024];
-        stream.read(&mut buffer).unwrap();
+        assert!(stream.read(&mut buffer).unwrap() > 0);
         write!(
             stream,
             "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",

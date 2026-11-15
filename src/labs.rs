@@ -1194,6 +1194,38 @@ pub fn log_launch() {
     );
 }
 
+static ANTIGRAVITY_SUMMARIES: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
+pub fn antigravity_summaries() -> bool {
+    if ANTIGRAVITY_SUMMARIES.load(Ordering::Acquire) == 0 {
+        let enabled = AppSettings::saved_labs().antigravity_summaries
+            && Feature::AntigravitySummaries.shipped()
+            && Feature::AntigravitySummaries.managed().is_none();
+        let _ = ANTIGRAVITY_SUMMARIES.compare_exchange(
+            0,
+            1 + u8::from(enabled),
+            Ordering::AcqRel,
+            Ordering::Acquire,
+        );
+    }
+    ANTIGRAVITY_SUMMARIES.load(Ordering::Acquire) == 2
+}
+
+static ANTIGRAVITY_REWRITING: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
+pub fn antigravity_rewriting() -> bool {
+    if ANTIGRAVITY_REWRITING.load(Ordering::Acquire) == 0 {
+        let enabled = AppSettings::saved_labs().antigravity_rewriting
+            && Feature::AntigravityRewriting.shipped()
+            && Feature::AntigravityRewriting.managed().is_none();
+        let _ = ANTIGRAVITY_REWRITING.compare_exchange(
+            0,
+            1 + u8::from(enabled),
+            Ordering::AcqRel,
+            Ordering::Acquire,
+        );
+    }
+    ANTIGRAVITY_REWRITING.load(Ordering::Acquire) == 2
+}
+
 #[cfg(test)]
 mod tests {
     use super::cli::resolve;
@@ -1953,34 +1985,3 @@ mod tests {
 
 // STATE already uses all 64 bits. Keep this gate tri-state so a CLI reader
 // can lazily load saved Labs before the application has applied settings.
-static ANTIGRAVITY_SUMMARIES: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
-pub fn antigravity_summaries() -> bool {
-    if ANTIGRAVITY_SUMMARIES.load(Ordering::Acquire) == 0 {
-        let enabled = AppSettings::saved_labs().antigravity_summaries
-            && Feature::AntigravitySummaries.shipped()
-            && Feature::AntigravitySummaries.managed().is_none();
-        let _ = ANTIGRAVITY_SUMMARIES.compare_exchange(
-            0,
-            1 + u8::from(enabled),
-            Ordering::AcqRel,
-            Ordering::Acquire,
-        );
-    }
-    ANTIGRAVITY_SUMMARIES.load(Ordering::Acquire) == 2
-}
-
-static ANTIGRAVITY_REWRITING: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
-pub fn antigravity_rewriting() -> bool {
-    if ANTIGRAVITY_REWRITING.load(Ordering::Acquire) == 0 {
-        let enabled = AppSettings::saved_labs().antigravity_rewriting
-            && Feature::AntigravityRewriting.shipped()
-            && Feature::AntigravityRewriting.managed().is_none();
-        let _ = ANTIGRAVITY_REWRITING.compare_exchange(
-            0,
-            1 + u8::from(enabled),
-            Ordering::AcqRel,
-            Ordering::Acquire,
-        );
-    }
-    ANTIGRAVITY_REWRITING.load(Ordering::Acquire) == 2
-}
