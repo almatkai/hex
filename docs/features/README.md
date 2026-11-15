@@ -1676,10 +1676,12 @@ Hex checks the release service            // maintain.updates
 │   │   └── Only after the user confirms -> download -> stage (never switches by itself)
 │   ├── required -> install without waiting for the rollout
 │   └── Rollout -> device-local bucket in <support>/update-bucket, never sent
-├── Direct install -> download (resumable) -> size + SHA-256 -> code signature -> stage
-│   ├── macOS -> unpack beside Hex.app -> Developer ID 5NZ4Q7NXJ4, anomaly.hex, notarized
-│   ├── Windows -> Authenticode valid, signer AUTHENTICODE_SIGNER -> new version directory
-│   ├── Linux -> SHA-256 only -> new version directory, `current` switched
+├── Fork feed (updater/fork.rs; docs/releasing-fork.md) -> manifest from GitHub Releases
+│   almatkai/hex `channel-<channel>/<channel>.json`, never anoma.ly
+├── Direct install -> download (resumable) -> size + SHA-256 -> fork ed25519 `<target>-sig` -> stage
+│   ├── macOS -> unpack beside Hex.app -> intact ad-hoc signature named anomaly.hex
+│   ├── Windows -> hex.exe and hex.com each signature-checked -> new version directory
+│   ├── Linux -> new version directory, `current` switched
 │   ├── Staged -> checks continue; Restart to update stays offered meanwhile
 │   │   ├── Another release this install takes (update, required) -> download -> replaces the staged one
 │   │   └── Same release, rollout deferred, unconfirmed switch, rollback, failure -> keep the staged one

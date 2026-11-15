@@ -24,14 +24,17 @@ pub const TARGET: &str = "linux-x64";
 pub const TARGET: &str = "linux-arm64";
 pub const DOWNLOAD_TARGET: &str = TARGET;
 
-/// Anomaly's ed25519 Linux release key, `.github/release/linux-signing.pub`
+/// Anomaly's ed25519 Linux release key, kept for upstream's installer; the
+/// fork's updates are checked with `super::fork` instead. Was, `.github/release/linux-signing.pub`
 /// (the `HEX_RELEASE_SIGNING_KEY` secret signs with its private half).
+#[cfg_attr(not(test), allow(dead_code))]
 pub const SIGNING_KEY: [u8; 32] = [
     0xbf, 0xad, 0x02, 0xe6, 0x22, 0x08, 0xff, 0x14, 0x4b, 0x5c, 0x9d, 0x21, 0xc7, 0xe7, 0x9c, 0x7c,
     0x16, 0xc6, 0x90, 0x42, 0x99, 0xa4, 0x37, 0xd8, 0x57, 0x30, 0x30, 0x07, 0xcd, 0x4f, 0xf7, 0xd8,
 ];
 
 /// The manifest target holding the signature of [`TARGET`].
+#[cfg_attr(not(test), allow(dead_code))]
 pub fn signature_target() -> String {
     format!("{TARGET}-sig")
 }
@@ -43,10 +46,12 @@ fn signed_message(sha256: &str) -> String {
 /// Whether `signature` is Anomaly's release key signing the executable whose
 /// SHA-256 is `sha256`. The manifest names that SHA-256, and the download is
 /// checked against it, so this ties the bytes to the key.
+#[cfg_attr(not(test), allow(dead_code))]
 pub fn verify_signature(sha256: &str, signature: &[u8]) -> Result<()> {
     verify_with(&SIGNING_KEY, sha256, signature)
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 fn verify_with(key: &[u8; 32], sha256: &str, signature: &[u8]) -> Result<()> {
     use ed25519_dalek::{Signature, VerifyingKey};
     let signature =
