@@ -4,7 +4,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::thread::{self, JoinHandle};
 
-use crate::transcription::models::{ModelRuntime, TranscriptionModelId, TranscriptionSelection};
+use crate::transcription::models::{TranscriptionModelId, TranscriptionSelection};
 
 type Prepare = dyn Fn(&TranscriptionSelection, bool, &AtomicBool, &AtomicU64) -> Result<(), String>
     + Send

@@ -12,7 +12,7 @@ use crate::rune_ui::Ui;
 use crate::rune_ui::controls::{ButtonKind, Paint, PushSize, button};
 use crate::rune_ui::lists::group_label;
 use crate::transcription::models::{
-    self as transcription_models, AUTO_LANGUAGE, ModelRuntime, TranscriptionModelId, language_name,
+    self as transcription_models, AUTO_LANGUAGE, TranscriptionModelId, language_name,
 };
 
 const PROGRESS_WIDTH: f32 = 196.0;

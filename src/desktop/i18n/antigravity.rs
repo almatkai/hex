@@ -50,6 +50,7 @@ pub(super) const TRANSLATIONS: &[(&str, [&str; 6])] = &[
 ("Turn on Antigravity rewriting in Labs", ["Włącz przepisywanie Antigravity w Labs", "在 Labs 中开启 Antigravity 改写", "Labs で Antigravity の書き換えをオンにしてください", "Antigravity-Überarbeitung in Labs einschalten", "Activa la reescritura con Antigravity en Labs", "Увімкніть переписування Antigravity в Labs"]),
 ("Turn on Antigravity summaries or rewriting in Labs", ["Włącz podsumowania lub przepisywanie Antigravity w Labs", "在 Labs 中开启 Antigravity 摘要或改写", "Labs で Antigravity の要約または書き換えをオンにしてください", "Antigravity-Zusammenfassungen oder Überarbeitung in Labs einschalten", "Activa los resúmenes o la reescritura con Antigravity en Labs", "Увімкніть підсумки або переписування Antigravity в Labs"]),
 ("Sends only this dictation to your Google account's Antigravity", ["Wysyła tylko to dyktowanie do Antigravity na Twoim koncie Google", "仅将本次听写发送到你 Google 账号的 Antigravity", "今回の音声入力だけを Google アカウントの Antigravity に送信します", "Sendet nur dieses Diktat an Antigravity in deinem Google-Konto", "Envía solo este dictado a Antigravity de tu cuenta de Google", "Надсилає лише це диктування до Antigravity вашого облікового запису Google"]),
+("Offer GigaAM Multilingual on Apple's MLX, beside its GGUF build, in the Local transcription picker", ["Oferuj GigaAM Multilingual na Apple MLX obok wersji GGUF w wyborze lokalnej transkrypcji", "在本地转录选择器中，在 GGUF 版本旁提供基于 Apple MLX 的 GigaAM Multilingual", "ローカル文字起こしの選択肢で、GGUF 版の横に Apple MLX 版の GigaAM Multilingual を表示する", "GigaAM Multilingual auf Apples MLX neben der GGUF-Version in der Auswahl für lokale Transkription anbieten", "Ofrecer GigaAM Multilingual en MLX de Apple, junto a su versión GGUF, en el selector de transcripción local", "Пропонувати GigaAM Multilingual на Apple MLX поруч із версією GGUF у списку локального розпізнавання"]),
 ];
 
 #[rustfmt::skip]
@@ -103,6 +104,7 @@ const EXTRA: &[(&str, [&str; 3])] = &[
 ("Turn on Antigravity rewriting in Labs", ["Ative a reescrita com Antigravity em Labs", "Activez la réécriture Antigravity dans Labs", "Включите переписывание Antigravity в Labs"]),
 ("Turn on Antigravity summaries or rewriting in Labs", ["Ative os resumos ou a reescrita com Antigravity em Labs", "Activez les résumés ou la réécriture Antigravity dans Labs", "Включите сводки или переписывание Antigravity в Labs"]),
 ("Sends only this dictation to your Google account's Antigravity", ["Envia apenas este ditado ao Antigravity da sua conta Google", "Envoie uniquement cette dictée à Antigravity de votre compte Google", "Отправляет только эту диктовку в Antigravity вашего аккаунта Google"]),
+("Offer GigaAM Multilingual on Apple's MLX, beside its GGUF build, in the Local transcription picker", ["Oferecer o GigaAM Multilingual no MLX da Apple, ao lado da versão GGUF, no seletor de transcrição local", "Proposer GigaAM Multilingual sur MLX d'Apple, à côté de sa version GGUF, dans le sélecteur de transcription locale", "Предлагать GigaAM Multilingual на Apple MLX рядом с версией GGUF в списке локального распознавания"]),
 ];
 
 pub(super) fn extra(column: usize) -> impl Iterator<Item = (&'static str, &'static str)> {

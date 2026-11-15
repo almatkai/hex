@@ -27,8 +27,8 @@ use crate::app_settings::AppSettings;
 use crate::desktop::i18n::{tr, tr_fill, tr_named};
 use crate::transcription::models::{
     self as transcription_models, AUTO_LANGUAGE, BenchmarkRecord, ModelDefinition,
-    ModelPreparationStage, ModelRuntime, Recommendation, TranscriptionModelId,
-    TranscriptionSelection, language_name,
+    ModelPreparationStage, Recommendation, TranscriptionModelId, TranscriptionSelection,
+    language_name,
 };
 
 const PANEL_WIDTH: f32 = compare::WIDTH;

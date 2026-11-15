@@ -297,7 +297,6 @@ impl Feature {
     pub fn on_this_os(self) -> bool {
         match self {
             Self::AntigravitySummaries | Self::MeetingAsk | Self::AntigravityRewriting => true,
-            Self::AntigravitySummaries => true,
             // MLX runs only on Apple Silicon's Metal, and only in a build
             // with the `mlx` cargo feature (docs/plans/gigaam-mlx.md).
             Self::GigaAmMlx => cfg!(hex_mlx),
