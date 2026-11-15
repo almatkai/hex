@@ -117,7 +117,6 @@ screencapturekit = { version = "=11.0.0", features = ["macos_15_0"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 ctrlc = { version = "3.5.2", features = ["termination"] }
-ed25519-dalek = { version = "2.2.0", default-features = false, features = ["std"] }
 futures-util = { version = "0.3.34", default-features = false, features = ["alloc"] }
 tokio = { version = "1.54.1", features = ["rt", "rt-multi-thread", "time"] }
 transcribe-cpp = { version = "=0.4.1", features = ["vulkan"] }
@@ -133,6 +132,8 @@ zbus = { version = "6.1.0", default-features = false, features = ["tokio", "prox
 # The desktop UI, and Annotate (Scrawl's capture engine), compiled into
 # every desktop build (`capture.enabled`).
 [target.'cfg(any(target_os = "linux", target_os = "macos", target_os = "windows"))'.dependencies]
+# The fork's update signatures (`updater/fork.rs`), and Linux's release key.
+ed25519-dalek = { version = "2.2.0", default-features = false, features = ["std"] }
 # `hex mcp`.
 rmcp = { version = "3.5.1", default-features = false, features = ["server", "macros", "transport-io"] }
 tokio = { version = "1.53.1", features = ["rt", "io-std"] }

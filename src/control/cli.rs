@@ -9,6 +9,7 @@
 use std::io::Write;
 mod antigravity;
 mod human;
+mod release;
 mod transcribe;
 use antigravity::AntigravityAction;
 
@@ -42,6 +43,22 @@ pub enum ControlCli {
     Antigravity {
         #[arg(value_enum)]
         action: AntigravityAction,
+    },
+    /// Release machines only: make the fork's update signing key and print
+    /// its public half (`docs/releasing-fork.md`).
+    #[command(hide = true)]
+    ReleaseKeygen {
+        #[arg(long)]
+        key: std::path::PathBuf,
+    },
+    /// Release machines only: sign release files with the update key,
+    /// writing `<file>.sig` beside each.
+    #[command(hide = true)]
+    ReleaseSign {
+        #[arg(long)]
+        key: std::path::PathBuf,
+        #[arg(required = true)]
+        files: Vec<std::path::PathBuf>,
     },
     /// Show what the running Hex is doing.
     ///
@@ -427,6 +444,8 @@ pub fn run(command: ControlCli) -> u8 {
     match command {
         ControlCli::Remote { action } => send(ControlCommand::Remote { action }, Output::default()),
         ControlCli::Antigravity { action } => antigravity::run(action),
+        ControlCli::ReleaseKeygen { key } => release::keygen(&key),
+        ControlCli::ReleaseSign { key, files } => release::sign(&key, &files),
         ControlCli::Status { output } => send(ControlCommand::Status, output),
         ControlCli::Start { output } => start(output),
         ControlCli::Quit { force, output } => send(ControlCommand::Quit { force }, output),

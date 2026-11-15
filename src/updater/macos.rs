@@ -1,7 +1,7 @@
 //! macOS installs: a `Hex.app` this user can replace updates itself. The
-//! update ZIP is unpacked beside the installed bundle (same volume), its code
-//! signature must satisfy Anomaly's Developer ID requirement for
-//! `anomaly.hex` and be notarized, and on "Restart to update" (or quit) the
+//! update ZIP, checked against the fork's ed25519 signature, is unpacked
+//! beside the installed bundle (same volume), its ad-hoc code signature must
+//! be intact and name `anomaly.hex`, and on "Restart to update" (or quit) the
 //! two bundles swap atomically (`renamex_np` with `RENAME_SWAP`). The old
 //! bundle stays beside it until the new version launches and removes it. A
 //! read-only, translocated, or root-owned location links to the DMG instead
@@ -22,10 +22,11 @@ use super::Method;
 pub const TARGET: &str = "macos-arm64";
 pub const DOWNLOAD_TARGET: &str = "macos-arm64-dmg";
 const BUNDLE_ID: &str = "anomaly.hex";
-/// A Developer ID application from Anomaly's team (5NZ4Q7NXJ4), identified
-/// as `anomaly.hex`, and notarized. The release build checks its artifacts
-/// against the same file.
-const REQUIREMENT: &str = include_str!("../../app/update-requirement.txt");
+/// The fork's releases are ad-hoc signed, with no Developer ID: the bundle
+/// must still carry an intact signature identified as `anomaly.hex`. The
+/// archive itself was checked against the fork's ed25519 signature
+/// (`super::fork`) before it was unpacked.
+const REQUIREMENT: &str = "identifier \"anomaly.hex\"";
 /// Unpacked updates (and, after a swap, the replaced bundle) live in
 /// `.<name>-update-<version>` beside the installed bundle.
 const STAGING_PREFIX: &str = ".Hex-update-";
@@ -188,7 +189,7 @@ fn verify_bundle(bundle: &Path, version: &str, requirement: &str) -> Result<()> 
         .wrap_err("could not run codesign")?;
     if !output.status.success() {
         bail!(
-            "the update's code signature is not Anomaly's notarized Developer ID: {}",
+            "the update's code signature is not an intact anomaly.hex signature: {}",
             String::from_utf8_lossy(&output.stderr).trim()
         );
     }
@@ -246,7 +247,7 @@ mod tests {
     }
 
     #[test]
-    fn the_developer_id_requirement_compiles() {
+    fn the_update_requirement_compiles() {
         let status = Command::new("/usr/bin/csreq")
             .arg(format!("-r={}", REQUIREMENT.trim()))
             .arg("-t")
@@ -285,11 +286,9 @@ mod tests {
     fn only_the_expected_signature_identity_and_version_pass() {
         let root = temporary("verify");
         let app = bundle(&root, BUNDLE_ID, "9.9.9");
-        // An ad-hoc signature satisfies a plain identifier requirement…
-        verify_bundle(&app, "9.9.9", "identifier \"anomaly.hex\"").unwrap();
-        // …but never Anomaly's Developer ID requirement.
-        let error = verify_bundle(&app, "9.9.9", REQUIREMENT).unwrap_err();
-        assert!(error.to_string().contains("code signature"), "{error}");
+        // The fork's releases are ad-hoc signed: an intact signature named
+        // anomaly.hex satisfies the update requirement.
+        verify_bundle(&app, "9.9.9", REQUIREMENT).unwrap();
         assert!(verify_bundle(&app, "9.9.8", "identifier \"anomaly.hex\"").is_err());
         let other = bundle(&root.join("other"), "com.kitlangton.hex2", "9.9.9");
         assert!(verify_bundle(&other, "9.9.9", "identifier \"com.kitlangton.hex2\"").is_err());

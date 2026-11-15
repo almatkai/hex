@@ -1,14 +1,26 @@
 # scripts/release-local.ps1
-# Builds and publishes a multi-platform release of the fork almatkai/hex
-# entirely from local machines (Windows x64 local + macOS arm64 over Tailscale).
-# Fully compatible with Windows PowerShell 5.1.
+# Builds and publishes a release of the fork almatkai/hex entirely from local
+# machines (Windows x64 here, macOS arm64 over Tailscale) to GitHub Releases,
+# where installed copies of Hex find it and update with one click
+# (src/updater/fork.rs, docs/releasing-fork.md). No GitHub Actions.
+#
+#   scripts\release-local.ps1 -Version 3.4.1 -DryRun   # checks and the plan only
+#   scripts\release-local.ps1 -Version 3.4.1           # build, sign, publish
+#
+# Windows PowerShell 5.1 compatible.
 
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true, Position = 0)]
     [string]$Version,
 
+    [ValidateSet('stable', 'beta', 'dev')]
+    [string]$Channel = 'stable',
+
     [switch]$DryRun,
+
+    # Publish Windows only; Macs then see no update in this release.
+    [switch]$SkipMac,
 
     [string]$MacHost = 'almat@100.67.107.38',
 
@@ -21,7 +33,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-# Helper for probing commands whose diagnostic stderr must not trigger PowerShell's NativeCommandError
+# Runs a probe whose diagnostic stderr must not raise NativeCommandError.
 function Invoke-Probe([scriptblock]$Command) {
     $prev = $ErrorActionPreference
     try {
@@ -32,407 +44,245 @@ function Invoke-Probe([scriptblock]$Command) {
     }
 }
 
-# Determine repository root
-$RepoRoot = if ($PSScriptRoot) {
-    (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-} else {
-    (Get-Location).Path
+# Runs a native command and stops on a nonzero exit.
+function Invoke-Native([string]$What, [scriptblock]$Command) {
+    & $Command
+    if ($LASTEXITCODE -ne 0) { throw "$What failed with exit code $LASTEXITCODE" }
 }
 
-# 1. Parameter validation
+$RepoRoot = if ($PSScriptRoot) { (Resolve-Path (Join-Path $PSScriptRoot '..')).Path } else { (Get-Location).Path }
+$Utf8 = New-Object System.Text.UTF8Encoding($false)
+
 if ($Version -notmatch '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$') {
-    throw "Invalid version format '$Version'. Expected semver format like 3.4.1 or 0.0.0-test."
+    throw "Invalid version '$Version'. Expected semver like 3.4.1 or 3.5.0-beta.1."
 }
-
 $tagName = "v$Version"
+$pointerTag = "channel-$Channel"
+$downloads = "/$Repo/releases/download/$tagName"
 
-# 2. Precondition checking
-Write-Host "=========================================================="
-Write-Host " Precondition Checks"
-Write-Host "=========================================================="
+# --- Preconditions ---------------------------------------------------------
+Write-Host '=========================================================='
+Write-Host " Precondition checks (Hex $Version, $Channel channel)"
+Write-Host '=========================================================='
 
-# Check current branch
+$checks = [ordered]@{}
 $currentBranch = (git -C $RepoRoot rev-parse --abbrev-ref HEAD).Trim()
-$branchOk = ($currentBranch -eq 'dev') -or $AllowAnyBranch
-
-# Check working tree cleanliness
-$dirtyStatus = (git -C $RepoRoot status --porcelain)
-$treeClean = [string]::IsNullOrEmpty($dirtyStatus)
-
-# Check up to date with origin/dev
-Invoke-Probe { git -C $RepoRoot fetch origin dev } | Out-Null
+$checks["Branch is dev ($currentBranch)"] = ($currentBranch -eq 'dev') -or $AllowAnyBranch
+$checks['Working tree is clean'] = [string]::IsNullOrEmpty((git -C $RepoRoot status --porcelain))
+Invoke-Probe { git -C $RepoRoot fetch -q origin dev } | Out-Null
 $commitSha = (git -C $RepoRoot rev-parse HEAD).Trim()
-$originDevSha = ""
-$rawOriginDev = (Invoke-Probe { git -C $RepoRoot rev-parse origin/dev })
-if ($rawOriginDev) {
-    $originDevSha = $rawOriginDev.Trim()
+$originDev = Invoke-Probe { git -C $RepoRoot rev-parse origin/dev }
+$checks['HEAD is origin/dev'] = $originDev -and ($commitSha -eq $originDev.Trim())
+$checks['GH_TOKEN is set'] = -not [string]::IsNullOrWhiteSpace($env:GH_TOKEN)
+$keyPath = Join-Path $RepoRoot 'secrets\update-signing.key'
+$checks['Update signing key (secrets\update-signing.key)'] = (Test-Path $keyPath) -and ((Get-Item $keyPath).Length -gt 0)
+$secretPath = Join-Path $RepoRoot 'secrets\antigravity-client-secret.txt'
+$checks['Antigravity client secret (secrets\)'] = (Test-Path $secretPath) -and ((Get-Item $secretPath).Length -gt 0)
+if (-not $SkipMac) {
+    Invoke-Probe { & ssh -o ConnectTimeout=5 -o BatchMode=yes -n $MacHost "test -s $MacRepo/secrets/antigravity-client-secret.txt" } | Out-Null
+    $checks["Mac reachable with the Antigravity secret ($MacHost)"] = ($LASTEXITCODE -eq 0)
 }
-$upToDate = ($commitSha -eq $originDevSha)
+$tagExists = (git -C $RepoRoot tag -l $tagName) -or (Invoke-Probe { git -C $RepoRoot ls-remote --tags origin "refs/tags/$tagName" })
+$checks["Tag $tagName is new"] = -not $tagExists
 
-# Check $env:GH_TOKEN set (never print token value)
-$ghTokenSet = -not [string]::IsNullOrWhiteSpace($env:GH_TOKEN)
-
-# Check local secret exists and is non-empty (never print secret content)
-$localSecretPath = Join-Path $RepoRoot 'secrets\antigravity-client-secret.txt'
-$localSecretOk = (Test-Path $localSecretPath) -and ((Get-Item $localSecretPath).Length -gt 0)
-
-# Check remote secret exists over Tailscale (never print secret content)
-$remoteSecretOk = $false
-Invoke-Probe { & ssh -o ConnectTimeout=5 -n $MacHost "test -s $MacRepo/secrets/antigravity-client-secret.txt" } | Out-Null
-if ($LASTEXITCODE -eq 0) {
-    $remoteSecretOk = $true
-}
-
-# Check if tag already exists locally or on remote
-$tagExists = $false
-$localTag = (git -C $RepoRoot tag -l $tagName)
-if ($localTag) {
-    $tagExists = $true
-} else {
-    $remoteTag = (Invoke-Probe { git -C $RepoRoot ls-remote --tags origin "refs/tags/$tagName" })
-    if ($remoteTag) {
-        $tagExists = $true
-    }
-}
-$tagOk = -not $tagExists
-
-# Output precondition results
-if ($branchOk) {
-    Write-Host " [PASS] Branch: '$currentBranch'" -ForegroundColor Green
-} else {
-    Write-Host " [FAIL] Branch: current is '$currentBranch' (expected 'dev')" -ForegroundColor Red
-}
-
-if ($treeClean) {
-    Write-Host " [PASS] Working tree: clean" -ForegroundColor Green
-} else {
-    Write-Host " [FAIL] Working tree: uncommitted changes detected" -ForegroundColor Red
-}
-
-if ($upToDate) {
-    Write-Host " [PASS] Up to date: commit matches origin/dev ($commitSha)" -ForegroundColor Green
-} else {
-    Write-Host " [FAIL] Up to date: local commit ($commitSha) does not match origin/dev ($originDevSha)" -ForegroundColor Red
-}
-
-if ($ghTokenSet) {
-    Write-Host " [PASS] GH_TOKEN: environment variable is set" -ForegroundColor Green
-} else {
-    Write-Host " [FAIL] GH_TOKEN: environment variable is not set" -ForegroundColor Red
-}
-
-if ($localSecretOk) {
-    Write-Host " [PASS] Local secret: present and non-empty (secrets\antigravity-client-secret.txt)" -ForegroundColor Green
-} else {
-    Write-Host " [FAIL] Local secret: missing or empty (secrets\antigravity-client-secret.txt)" -ForegroundColor Red
-}
-
-if ($remoteSecretOk) {
-    Write-Host " [PASS] Remote secret: present on ${MacHost}:$MacRepo/secrets/antigravity-client-secret.txt" -ForegroundColor Green
-} else {
-    Write-Host " [FAIL] Remote secret: missing, empty, or host unreachable on ${MacHost}:$MacRepo" -ForegroundColor Red
-}
-
-if ($tagOk) {
-    Write-Host " [PASS] Release tag: '$tagName' does not already exist" -ForegroundColor Green
-} else {
-    Write-Host " [FAIL] Release tag: '$tagName' already exists" -ForegroundColor Red
-}
-
-# In live mode, fail immediately if any precondition is not satisfied
-if (-not $DryRun) {
-    if (-not $branchOk) {
-        throw "Precondition failed: Current branch is '$currentBranch', expected 'dev'. (Use -AllowAnyBranch to override)."
-    }
-    if (-not $treeClean) {
-        throw "Precondition failed: Working tree is not clean. Commit or stash changes before releasing."
-    }
-    if (-not $upToDate) {
-        throw "Precondition failed: Local HEAD does not match origin/dev."
-    }
-    if (-not $ghTokenSet) {
-        throw "Precondition failed: GH_TOKEN environment variable must be set (do not print it)."
-    }
-    if (-not $localSecretOk) {
-        throw "Precondition failed: Local secret file 'secrets\antigravity-client-secret.txt' is missing or empty."
-    }
-    if (-not $remoteSecretOk) {
-        throw "Precondition failed: Remote secret file on $MacHost at '$MacRepo/secrets/antigravity-client-secret.txt' is missing or empty."
-    }
-    if (-not $tagOk) {
-        throw "Precondition failed: Release tag '$tagName' already exists."
-    }
-}
-
-# 3. Generate Release Notes from git log since previous tag
-$prevTagRaw = (Invoke-Probe { git -C $RepoRoot describe --tags --abbrev=0 })
-$prevTag = if ($prevTagRaw) { $prevTagRaw.Trim() } else { "" }
-$notesContent = ""
-if ($prevTag) {
-    $rawLog = (git -C $RepoRoot log "$prevTag..HEAD" --pretty=format:"* %s (%h)")
-    if (-not $rawLog) {
-        $notesContent = "Hex release $Version (commit $commitSha)"
+$failed = $false
+foreach ($name in $checks.Keys) {
+    if ($checks[$name]) {
+        Write-Host " [PASS] $name" -ForegroundColor Green
     } else {
-        $formattedLog = $rawLog -join "`n"
-        $notesContent = "## What's Changed since $prevTag`n`n$formattedLog"
+        Write-Host " [FAIL] $name" -ForegroundColor Red
+        $failed = $true
     }
-} else {
-    $rawLog = (git -C $RepoRoot log -n 50 --pretty=format:"* %s (%h)")
-    $formattedLog = $rawLog -join "`n"
-    $notesContent = "## Hex $Version`n`n$formattedLog"
 }
 
-# 4. Dry Run Execution
+# --- Release notes ---------------------------------------------------------
+$prevTag = Invoke-Probe { git -C $RepoRoot describe --tags --abbrev=0 --match 'v*' }
+$range = if ($prevTag) { "$($prevTag.Trim())..HEAD" } else { '-n50' }
+$log = @(git -C $RepoRoot log $range --pretty=format:'* %s (%h)')
+$notes = if ($prevTag) { "## Changes since $($prevTag.Trim())`n`n" } else { "## Hex $Version`n`n" }
+$notes += ($log -join "`n")
+$notes += "`n`n## Install`n`nWindows (PowerShell):`n`n    irm https://github.com/$Repo/releases/latest/download/install-hex.ps1 | iex`n`nmacOS: open the .dmg and drag Hex to Applications.`n`nInstalled copies update themselves: Hex shows Restart to update."
+
 if ($DryRun) {
-    Write-Host ""
-    Write-Host "=========================================================="
-    Write-Host " [DRY RUN] Release Plan for Hex $Version"
-    Write-Host "=========================================================="
-    Write-Host "Commit SHA   : $commitSha"
-    Write-Host "Repository   : $Repo"
-    Write-Host "Release Tag  : $tagName"
-    Write-Host "Previous Tag : $(if ($prevTag) { $prevTag } else { 'none' })"
-    Write-Host ""
-    Write-Host "1. Windows Build (Local):"
-    Write-Host "   - Set `$env:HEX_LOCAL_BUILD = '1' (fork builds never self-update to upstream releases)"
-    Write-Host "   - Set `$env:TRANSCRIBE_CMAKE_ARGS = '-DGGML_NATIVE=OFF'"
-    Write-Host "   - Set `$env:HEX_VERSION = '$Version'"
-    Write-Host "   - cargo build --locked --release --target x86_64-pc-windows-msvc"
-    Write-Host "   - cargo build --locked --release --target x86_64-pc-windows-msvc -p hex-console"
-    Write-Host "   - Package target\x86_64-pc-windows-msvc\release\hex.exe and hex-console.exe (as hex.com)"
-    Write-Host "     into dist\$Version\hex-$Version-windows-x64.zip with package SHA256SUMS"
-    Write-Host ""
-    Write-Host "2. macOS Build (Remote over Tailscale):"
-    Write-Host "   - Host: $MacHost"
-    Write-Host "   - Path: $MacRepo"
-    Write-Host "   - Generate bash build script with LF and no BOM"
-    Write-Host "   - scp script to ${MacHost}:/tmp/hex-release-$Version.sh"
-    Write-Host "   - Execute via ssh:"
-    Write-Host "       refuse a dirty checkout; git fetch origin && git checkout $commitSha (switched back afterwards)"
-    Write-Host "       export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer"
-    Write-Host "       export HEX_VERSION=$Version"
-    Write-Host "       export HEX_RELEASE_UNSIGNED=1 HEX_LOCAL_BUILD=1"
-    Write-Host "       ./scripts/build-app.sh"
-    Write-Host "       /usr/bin/ditto -c -k --keepParent target/app/Hex.app dist/hex-$Version-macos-arm64.zip"
-    Write-Host "       Package DMG if scripts/package-dmg.sh or hdiutil available"
-    Write-Host "   - scp dist/hex-$Version-macos-arm64.zip (and DMG if created) back to dist\$Version\"
-    Write-Host ""
-    Write-Host "3. Publish to GitHub Release:"
-    Write-Host "   - Compute dist\$Version\SHA256SUMS for this release's artifacts only"
-    Write-Host "   - Create release with gh CLI:"
-    Write-Host "       gh release create $tagName --repo $Repo --target $commitSha --title `"Hex $Version`" --notes-file <notes> <artifacts...>"
-    Write-Host ""
-    Write-Host "Generated Release Notes Preview:"
-    Write-Host "----------------------------------------------------------"
-    Write-Host $notesContent
-    Write-Host "----------------------------------------------------------"
-    Write-Host ""
-
-    $hasFailures = (-not $branchOk) -or (-not $treeClean) -or (-not $upToDate) -or (-not $ghTokenSet) -or (-not $localSecretOk) -or (-not $remoteSecretOk) -or (-not $tagOk)
-    if ($hasFailures) {
-        Write-Host "[DRY RUN] One or more preconditions failed (see above). In a live run, the script would abort here." -ForegroundColor Yellow
-    } else {
-        Write-Host "[DRY RUN] All preconditions passed. Ready for live release!" -ForegroundColor Green
-    }
+    Write-Host ''
+    Write-Host '=========================================================='
+    Write-Host " [DRY RUN] Plan for Hex $Version ($Channel)"
+    Write-Host '=========================================================='
+    Write-Host " Commit  : $commitSha"
+    Write-Host " Release : $Repo $tagName, then pointer $pointerTag/$Channel.json"
+    Write-Host ' 1. Windows: cargo build --release (hex, hex-console), HEX_BUILD_CHANNEL, updates on'
+    if ($SkipMac) { Write-Host ' 2. macOS: skipped' } else { Write-Host " 2. macOS on ${MacHost}: build-app.sh (HEX_RELEASE_UNSIGNED=1), zip + dmg" }
+    Write-Host ' 3. Sign every file with secrets\update-signing.key (<file>.sig)'
+    Write-Host " 4. Write $Channel.json (schema 1), publish $tagName, move $pointerTag"
+    Write-Host ''
+    Write-Host $notes
+    Write-Host ''
+    if ($failed) { Write-Host '[DRY RUN] Some checks failed; a real run would stop here.' -ForegroundColor Yellow }
+    else { Write-Host '[DRY RUN] All checks passed.' -ForegroundColor Green }
     return
 }
+if ($failed) { throw 'Preconditions failed (see above).' }
 
-# 5. Live Release Execution
+$dist = Join-Path (Join-Path $RepoRoot 'dist') $Version
+if (Test-Path $dist) { Remove-Item $dist -Recurse -Force }
+New-Item -ItemType Directory -Force $dist | Out-Null
 
-# Step 1: Windows build
-Write-Host ""
-Write-Host "==> [1/3] Building Windows x64 release..." -ForegroundColor Cyan
-
-# A fork build must never replace itself with an upstream (Anomaly) release:
-# HEX_LOCAL_BUILD=1 turns the updater off ("Local build · updates off").
-$env:HEX_LOCAL_BUILD = '1'
+# --- 1. Windows ------------------------------------------------------------
+Write-Host ''
+Write-Host '==> [1/4] Building Windows x64...' -ForegroundColor Cyan
+foreach ($name in 'HEX_LOCAL_BUILD', 'HEX_TEST_BUILD') {
+    if (Test-Path "env:$name") { Remove-Item "env:$name" }
+}
 $env:TRANSCRIBE_CMAKE_ARGS = '-DGGML_NATIVE=OFF'
 $env:HEX_VERSION = $Version
-
-$targetTriple = 'x86_64-pc-windows-msvc'
-
-Write-Host "Running: cargo build --locked --release --target $targetTriple"
-& cargo build --locked --release --target $targetTriple
-if ($LASTEXITCODE -ne 0) {
-    throw "cargo build for hex failed with exit code $LASTEXITCODE"
+$env:HEX_BUILD_CHANNEL = $Channel
+$triple = 'x86_64-pc-windows-msvc'
+Push-Location $RepoRoot
+try {
+    Invoke-Native 'cargo build (hex)' { cargo build --locked --release --target $triple }
+    Invoke-Native 'cargo build (hex-console)' { cargo build --locked --release --target $triple -p hex-console }
+} finally {
+    Pop-Location
 }
-
-Write-Host "Running: cargo build --locked --release --target $targetTriple -p hex-console"
-& cargo build --locked --release --target $targetTriple -p hex-console
-if ($LASTEXITCODE -ne 0) {
-    throw "cargo build for hex-console failed with exit code $LASTEXITCODE"
-}
-
 $targetDir = if ($env:CARGO_TARGET_DIR) { $env:CARGO_TARGET_DIR } else { Join-Path $RepoRoot 'target' }
-$hexExe = Join-Path $targetDir "$targetTriple\release\hex.exe"
-$hexConsoleExe = Join-Path $targetDir "$targetTriple\release\hex-console.exe"
+$built = Join-Path $targetDir "$triple\release"
+$winExe = Join-Path $dist "hex-$Version-windows-x64.exe"
+$winCli = Join-Path $dist "hex-$Version-windows-x64-cli.exe"
+Copy-Item (Join-Path $built 'hex.exe') $winExe
+Copy-Item (Join-Path $built 'hex-console.exe') $winCli
+$reported = (& (Join-Path $built 'hex-console.exe') --version) -split '\s+' | Select-Object -Last 1
+if ($reported -ne $Version) { throw "The Windows build reports $reported, expected $Version." }
+Copy-Item (Join-Path $RepoRoot 'scripts\install-hex.ps1') (Join-Path $dist 'install-hex.ps1')
 
-if (-not (Test-Path $hexExe)) {
-    throw "Missing built hex.exe at $hexExe"
+# --- 2. macOS --------------------------------------------------------------
+$macZip = Join-Path $dist "hex-$Version-macos-arm64.zip"
+$macDmg = Join-Path $dist "hex-$Version-macos-arm64.dmg"
+if (-not $SkipMac) {
+    Write-Host ''
+    Write-Host "==> [2/4] Building macOS arm64 on $MacHost..." -ForegroundColor Cyan
+    $remoteScript = "/tmp/hex-release-$Version.sh"
+    $bash = @(
+        '#!/usr/bin/env bash',
+        'set -euo pipefail',
+        'export PATH="/opt/homebrew/bin:/opt/homebrew/opt/rustup/bin:$HOME/.cargo/bin:$PATH"',
+        "cd $MacRepo",
+        'test -s secrets/antigravity-client-secret.txt || { echo "secrets/antigravity-client-secret.txt is missing" >&2; exit 1; }',
+        'if [ -n "$(git status --porcelain --untracked-files=no)" ]; then echo "the Mac checkout has uncommitted changes" >&2; exit 1; fi',
+        'previous=$(git symbolic-ref --short -q HEAD || git rev-parse HEAD)',
+        'trap ''git checkout -q "$previous" || true'' EXIT',
+        'git fetch -q origin',
+        "git checkout -q $commitSha",
+        'export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer',
+        "export HEX_VERSION=$Version HEX_BUILD_CHANNEL=$Channel HEX_RELEASE_UNSIGNED=1",
+        'unset HEX_LOCAL_BUILD HEX_TEST_BUILD',
+        './scripts/build-app.sh',
+        'mkdir -p dist',
+        "zip=dist/hex-$Version-macos-arm64.zip",
+        "dmg=dist/hex-$Version-macos-arm64.dmg",
+        'rm -f "$zip" "$dmg"',
+        '/usr/bin/ditto -c -k --keepParent target/app/Hex.app "$zip"',
+        'staging=$(mktemp -d "${TMPDIR:-/tmp}/hex-dmg.XXXXXX")',
+        '/usr/bin/ditto target/app/Hex.app "$staging/Hex.app"',
+        'ln -s /Applications "$staging/Applications"',
+        'for attempt in 1 2 3 4 5; do hdiutil create -quiet -fs APFS -format ULFO -volname Hex -srcfolder "$staging" "$dmg" && break; rm -f "$dmg"; sleep 2; done',
+        'rm -rf "$staging"',
+        'test -s "$dmg"',
+        'ls -l "$zip" "$dmg"'
+    )
+    $local = [System.IO.Path]::GetTempFileName()
+    [System.IO.File]::WriteAllText($local, (($bash -join "`n") + "`n"), $Utf8)
+    try {
+        Invoke-Native 'scp of the Mac build script' { scp -q $local "${MacHost}:$remoteScript" }
+        Invoke-Native 'the Mac build' { ssh -n $MacHost "bash $remoteScript" }
+    } finally {
+        Remove-Item $local -Force -ErrorAction SilentlyContinue
+        Invoke-Probe { ssh -n $MacHost "rm -f $remoteScript" } | Out-Null
+    }
+    Invoke-Native 'download of the Mac zip' { scp -q "${MacHost}:$MacRepo/dist/hex-$Version-macos-arm64.zip" $macZip }
+    Invoke-Native 'download of the Mac dmg' { scp -q "${MacHost}:$MacRepo/dist/hex-$Version-macos-arm64.dmg" $macDmg }
+} else {
+    Write-Host ''
+    Write-Host '==> [2/4] macOS skipped' -ForegroundColor Yellow
 }
-if (-not (Test-Path $hexConsoleExe)) {
-    throw "Missing built hex-console.exe at $hexConsoleExe"
+
+# --- 3. Sign ---------------------------------------------------------------
+Write-Host ''
+Write-Host '==> [3/4] Signing with the update key...' -ForegroundColor Cyan
+# target name -> file; each gets <target>-sig in the manifest.
+$targets = [ordered]@{
+    'windows-x64'     = $winExe
+    'windows-x64-cli' = $winCli
+}
+if (-not $SkipMac) {
+    $targets['macos-arm64'] = $macZip
+    $targets['macos-arm64-dmg'] = $macDmg
+}
+$signer = Join-Path $built 'hex-console.exe'
+$files = @($targets.Values)
+Invoke-Native 'release-sign' { & $signer release-sign --key $keyPath @files }
+foreach ($file in $files) {
+    if (-not (Test-Path "$file.sig") -or (Get-Item "$file.sig").Length -ne 64) { throw "No signature for $file." }
 }
 
-# One folder per release, so a publish never uploads an older release's files.
-$distDir = Join-Path (Join-Path $RepoRoot 'dist') $Version
-if (Test-Path $distDir) {
-    Remove-Item $distDir -Recurse -Force
+# --- 4. Manifest and publish -----------------------------------------------
+Write-Host ''
+Write-Host "==> [4/4] Publishing $tagName and moving $pointerTag..." -ForegroundColor Cyan
+function Entry([string]$path) {
+    [ordered]@{
+        url    = "$downloads/$(Split-Path -Leaf $path)"
+        size   = (Get-Item $path).Length
+        sha256 = (Get-FileHash -Algorithm SHA256 $path).Hash.ToLowerInvariant()
+    }
 }
-New-Item -ItemType Directory -Path $distDir -Force | Out-Null
+$manifestTargets = [ordered]@{}
+foreach ($name in $targets.Keys) {
+    $manifestTargets[$name] = Entry $targets[$name]
+    $manifestTargets["$name-sig"] = Entry "$($targets[$name]).sig"
+}
+$now = [DateTimeOffset]::UtcNow
+$manifest = [ordered]@{
+    schema       = 1
+    app          = 'hex'
+    artifact     = 'desktop'
+    channel      = $Channel
+    sequence     = $now.ToUnixTimeSeconds()
+    published_at = $now.ToString('yyyy-MM-ddTHH:mm:ssZ')
+    release      = [ordered]@{
+        version         = $Version
+        notes_url       = "https://github.com/$Repo/releases/tag/$tagName"
+        rollout_percent = 100
+        required        = $false
+        distributions   = @(@{ kind = 'direct' })
+        targets         = $manifestTargets
+    }
+}
+$manifestPath = Join-Path $dist "$Channel.json"
+[System.IO.File]::WriteAllText($manifestPath, ($manifest | ConvertTo-Json -Depth 8), $Utf8)
 
-$winStaging = Join-Path ([System.IO.Path]::GetTempPath()) ("hex-win-stage-" + [System.Guid]::NewGuid().ToString('N'))
-New-Item -ItemType Directory -Path $winStaging -Force | Out-Null
+$sums = Get-ChildItem $dist -File | Where-Object { $_.Name -ne 'SHA256SUMS' } | ForEach-Object {
+    "$((Get-FileHash -Algorithm SHA256 $_.FullName).Hash.ToLowerInvariant())  $($_.Name)"
+}
+[System.IO.File]::WriteAllLines((Join-Path $dist 'SHA256SUMS'), [string[]]$sums, $Utf8)
 
+$notesFile = [System.IO.Path]::GetTempFileName()
+[System.IO.File]::WriteAllText($notesFile, $notes, $Utf8)
 try {
-    Copy-Item $hexExe (Join-Path $winStaging 'hex.exe') -Force
-    Copy-Item $hexConsoleExe (Join-Path $winStaging 'hex.com') -Force
-
-    $winFiles = @('hex.exe', 'hex.com')
-    $winSums = @()
-    foreach ($binName in $winFiles) {
-        $binPath = Join-Path $winStaging $binName
-        $hashVal = (Get-FileHash -Path $binPath -Algorithm SHA256).Hash.ToLowerInvariant()
-        $winSums += "$hashVal  $binName"
+    $assets = @(Get-ChildItem $dist -File | ForEach-Object { $_.FullName })
+    $kind = if ($Channel -eq 'stable') { '--latest' } else { '--prerelease' }
+    # Files first: the pointer only moves once everything it names exists.
+    Invoke-Native "gh release create $tagName" {
+        gh release create $tagName --repo $Repo --target $commitSha --title "Hex $Version" --notes-file $notesFile $kind @assets
     }
-    $winSumsPath = Join-Path $winStaging 'SHA256SUMS'
-    [System.IO.File]::WriteAllLines($winSumsPath, $winSums, (New-Object System.Text.UTF8Encoding($false)))
-
-    $winZip = Join-Path $distDir "hex-$Version-windows-x64.zip"
-    if (Test-Path $winZip) {
-        Remove-Item $winZip -Force
-    }
-    Compress-Archive -Path "$winStaging\*" -DestinationPath $winZip -Force
-    Write-Host "Windows package created: $winZip" -ForegroundColor Green
-} finally {
-    Remove-Item $winStaging -Recurse -Force -ErrorAction SilentlyContinue
-}
-
-# Step 2: macOS build over Tailscale
-Write-Host ""
-Write-Host "==> [2/3] Building macOS ARM64 release on $MacHost..." -ForegroundColor Cyan
-
-$remoteScriptPath = "/tmp/hex-release-$Version.sh"
-$localTempScript = [System.IO.Path]::GetTempFileName()
-
-$bashLines = @(
-    '#!/usr/bin/env bash',
-    'set -euo pipefail',
-    "cd $MacRepo",
-    'if [ ! -s secrets/antigravity-client-secret.txt ]; then',
-    '    echo "Error: secrets/antigravity-client-secret.txt is missing or empty" >&2',
-    '    exit 1',
-    'fi',
-    'if [ -n "$(git status --porcelain --untracked-files=no)" ]; then',
-    '    echo "Error: the Mac checkout has uncommitted changes" >&2',
-    '    exit 1',
-    'fi',
-    'previous=$(git symbolic-ref --short -q HEAD || git rev-parse HEAD)',
-    'trap ''git checkout -q "$previous" || true'' EXIT',
-    'git fetch origin',
-    "git checkout -q `"$commitSha`"",
-    'export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer',
-    "export HEX_VERSION=`"$Version`"",
-    'export HEX_RELEASE_UNSIGNED=1',
-    '# A fork build must never replace itself with an upstream release.',
-    'export HEX_LOCAL_BUILD=1',
-    './scripts/build-app.sh',
-    'mkdir -p dist',
-    "zip_file=`"dist/hex-${Version}-macos-arm64.zip`"",
-    "dmg_file=`"dist/hex-${Version}-macos-arm64.dmg`"",
-    'rm -f "$zip_file"',
-    '/usr/bin/ditto -c -k --keepParent target/app/Hex.app "$zip_file"',
-    'rm -f "$dmg_file"',
-    'if [ -x ./scripts/package-dmg.sh ]; then',
-    '    ./scripts/package-dmg.sh target/app/Hex.app "$dmg_file"',
-    'elif command -v hdiutil >/dev/null 2>&1; then',
-    '    staging=$(mktemp -d "${TMPDIR:-/tmp}/hex-dmg.XXXXXX")',
-    '    /usr/bin/ditto target/app/Hex.app "$staging/Hex.app"',
-    '    ln -s /Applications "$staging/Applications"',
-    '    if [ -f packaging/macos/dmg/background.tiff ]; then',
-    '        cp packaging/macos/dmg/background.tiff "$staging/.background.tiff"',
-    '    fi',
-    '    if [ -f packaging/macos/dmg/DS_Store ]; then',
-    '        cp packaging/macos/dmg/DS_Store "$staging/.DS_Store"',
-    '    fi',
-    '    for attempt in 1 2 3 4 5; do',
-    '        hdiutil create -quiet -fs APFS -format ULFO -volname Hex -srcfolder "$staging" "$dmg_file" && break',
-    '        echo "hdiutil create failed (attempt $attempt); retrying in 2s..." >&2',
-    '        rm -f "$dmg_file"',
-    '        sleep 2',
-    '    done',
-    '    rm -rf "$staging"',
-    'fi',
-    'echo "macOS build and packaging complete."',
-    'ls -lh dist/hex-*'
-)
-
-$bashScriptText = ($bashLines -join "`n") + "`n"
-$utf8NoBom = New-Object System.Text.UTF8Encoding($false)
-[System.IO.File]::WriteAllText($localTempScript, $bashScriptText, $utf8NoBom)
-
-try {
-    Write-Host "Copying build script to ${MacHost}:$remoteScriptPath..."
-    & scp $localTempScript "${MacHost}:$remoteScriptPath"
+    Invoke-Probe { gh release view $pointerTag --repo $Repo --json tagName } | Out-Null
     if ($LASTEXITCODE -ne 0) {
-        throw "scp of build script failed with exit code $LASTEXITCODE"
+        Invoke-Native "gh release create $pointerTag" {
+            gh release create $pointerTag --repo $Repo --target $commitSha --prerelease --title "Hex $Channel update feed" --notes "Update feed for Hex's $Channel channel. Installed copies read $Channel.json here; download Hex from the versioned releases."
+        }
     }
-
-    Write-Host "Running remote build script on $MacHost..."
-    & ssh -n $MacHost "bash $remoteScriptPath"
-    $remoteStatus = $LASTEXITCODE
-    & ssh -n $MacHost "rm -f $remoteScriptPath" 2>$null
-    if ($remoteStatus -ne 0) {
-        throw "Remote build failed on $MacHost with exit code $remoteStatus"
-    }
-
-    Write-Host "Downloading macOS artifacts from $MacHost..."
-    $macZip = Join-Path $distDir "hex-$Version-macos-arm64.zip"
-    & scp "${MacHost}:$MacRepo/dist/hex-$Version-macos-arm64.zip" $macZip
-    if ($LASTEXITCODE -ne 0) {
-        throw "Failed to download macOS zip artifact from $MacHost"
-    }
-
-    $macDmg = Join-Path $distDir "hex-$Version-macos-arm64.dmg"
-    & scp "${MacHost}:$MacRepo/dist/hex-$Version-macos-arm64.dmg" $macDmg 2>$null
-    if (Test-Path $macDmg) {
-        Write-Host "Downloaded macOS DMG: $macDmg" -ForegroundColor Green
-    }
+    Invoke-Native "gh release upload $pointerTag" { gh release upload $pointerTag $manifestPath --repo $Repo --clobber }
 } finally {
-    Remove-Item $localTempScript -Force -ErrorAction SilentlyContinue
+    Remove-Item $notesFile -Force -ErrorAction SilentlyContinue
 }
-
-# Step 3: Publish to GitHub
-Write-Host ""
-Write-Host "==> [3/3] Publishing release $tagName to GitHub..." -ForegroundColor Cyan
-
-$distArtifacts = Get-ChildItem -Path $distDir -File | Where-Object { $_.Name -ne 'SHA256SUMS' }
-$checksumLines = @()
-foreach ($artifact in $distArtifacts) {
-    $sha = (Get-FileHash -Path $artifact.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
-    $checksumLines += "$sha  $($artifact.Name)"
-}
-$sumsFile = Join-Path $distDir 'SHA256SUMS'
-[System.IO.File]::WriteAllLines($sumsFile, $checksumLines, (New-Object System.Text.UTF8Encoding($false)))
-Write-Host "Generated $sumsFile"
-
-$notesTempFile = [System.IO.Path]::GetTempFileName()
-[System.IO.File]::WriteAllText($notesTempFile, $notesContent, (New-Object System.Text.UTF8Encoding($false)))
-
-try {
-    $allArtifacts = Get-ChildItem -Path $distDir -File | ForEach-Object { $_.FullName }
-    Write-Host "Creating GitHub Release $tagName on $Repo..."
-    & gh release create $tagName `
-        --repo $Repo `
-        --target $commitSha `
-        --title "Hex $Version" `
-        --notes-file $notesTempFile `
-        @allArtifacts
-
-    if ($LASTEXITCODE -ne 0) {
-        throw "gh release create failed with exit code $LASTEXITCODE"
-    }
-    Write-Host "Successfully published Hex $Version release to GitHub!" -ForegroundColor Green
-} finally {
-    Remove-Item $notesTempFile -Force -ErrorAction SilentlyContinue
-}
+Write-Host ''
+Write-Host "Published Hex $Version on the $Channel channel: https://github.com/$Repo/releases/tag/$tagName" -ForegroundColor Green
+Write-Host 'Installed copies offer it within an hour, or at once from Check for updates.'

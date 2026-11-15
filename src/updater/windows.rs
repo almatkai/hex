@@ -2,10 +2,10 @@
 //! (`%APPDATA%\hex\install.json`) updates itself by staging the
 //! new `hex.exe` and its console entry point `hex.com` (crates/console) into
 //! their own version directory and switching the `current-version` pointer.
-//! `bin\hex.com`, the copy PATH names, follows. Before anything runs, every
-//! download must carry a valid Authenticode signature from Anomaly's
-//! Artifact Signing identity. Administrators turn updates off with the
-//! `DisableUpdates` policy value.
+//! `bin\hex.com`, the copy PATH names, follows. The fork has no Authenticode
+//! identity: before anything runs, every download must carry the fork's
+//! ed25519 signature (`super::fork`), checked before staging. Administrators
+//! turn updates off with the `DisableUpdates` policy value.
 
 use std::fs::{self, OpenOptions};
 use std::path::{Path, PathBuf};
@@ -32,8 +32,9 @@ pub const DOWNLOAD_TARGET: &str = "windows-x64-setup";
 pub const DOWNLOAD_TARGET: &str = "windows-arm64-setup";
 
 /// The common name of the certificate Azure Artifact Signing issues to
-/// Anomaly (as on OpenCode's signed Windows builds); updates signed by
-/// anyone else are refused.
+/// Anomaly (as on OpenCode's signed Windows builds). The fork's releases
+/// carry no Authenticode signature, so updates don't require it.
+#[cfg_attr(not(test), allow(dead_code))]
 pub const AUTHENTICODE_SIGNER: &str = "Anomaly Innovations, Inc https://anoma.ly/";
 /// `HKLM` (or `HKCU`) `\SOFTWARE\Policies\Anomaly\Hex`, value `DisableUpdates`.
 const POLICY_KEY: &str = r"SOFTWARE\Policies\Anomaly\Hex";
@@ -197,12 +198,8 @@ pub fn updates_disabled_by_policy() -> bool {
 }
 
 /// Stages `file` (hex.exe) and `console` (hex.com), when the release has
-/// one, as `version`.
+/// one, as `version`. Both were checked against the fork's signature.
 pub fn stage(file: &Path, console: Option<&Path>, version: &str) -> Result<Staged> {
-    verify_authenticode(file, AUTHENTICODE_SIGNER)?;
-    if let Some(console) = console {
-        verify_authenticode(console, AUTHENTICODE_SIGNER)?;
-    }
     let support = crate::app_paths::support_dir()?;
     let lock = OpenOptions::new()
         .create(true)
@@ -251,6 +248,7 @@ pub fn stage(file: &Path, console: Option<&Path>, version: &str) -> Result<Stage
 
 /// Requires a valid Authenticode signature (chain and timestamp checked by
 /// Windows) whose signer certificate's common name is `signer`.
+#[cfg_attr(not(test), allow(dead_code))]
 pub fn verify_authenticode(file: &Path, signer: &str) -> Result<()> {
     let output = background_process::command("powershell.exe")
         .args([
@@ -380,9 +378,9 @@ pub fn console_missing() -> bool {
 
 /// Adds a release's verified `hex.com` beside the running `hex.exe` and on
 /// PATH, for an install whose updater predates it. hex.com only starts the
-/// `hex.exe` beside it, so any release's copy serves this version.
+/// `hex.exe` beside it, so any release's copy serves this version. `file`
+/// was checked against the fork's signature.
 pub fn install_console(file: &Path) -> Result<()> {
-    verify_authenticode(file, AUTHENTICODE_SIGNER)?;
     let support = crate::app_paths::support_dir()?;
     let beside = std::env::current_exe()?.with_file_name("hex.com");
     replace_file(file, &beside)?;

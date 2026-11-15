@@ -11,9 +11,12 @@
 //! after the user confirms. Package-managed installs only learn the command to run;
 //! source builds, test builds, and installs whose administrator set
 //! `DisableUpdates` never check. Manifests are not signed: HTTPS, the
-//! manifest's SHA-256, and (macOS, Windows) the code signature are the
-//! integrity checks.
+//! manifest's SHA-256, and the fork's ed25519 signature of every file
+//! (`fork`) are the integrity checks. In this fork the manifests and files
+//! come from GitHub Releases (`fork::FEED`), never Anomaly's service.
 
+mod fork;
+pub use fork::{keygen as release_keygen, sign_files as release_sign};
 #[cfg(any(target_os = "linux", target_os = "windows"))]
 pub mod legacy;
 pub(crate) mod notes;
@@ -40,7 +43,6 @@ pub use platform::finish_on_launch;
 
 const APP: &str = "hex";
 const ARTIFACT: &str = "desktop";
-const ORIGIN: &str = "https://anoma.ly/release";
 const STARTUP_DELAY: Duration = Duration::from_secs(10);
 const CHECK_INTERVAL: Duration = Duration::from_secs(60 * 60);
 /// Dev builds land on every push to dev, so the Dev channel checks often.
@@ -675,7 +677,7 @@ fn check(
         } => Ok(match command {
             Some(command) => State::Command { command },
             None => State::Download {
-                url: notes_url.unwrap_or_else(|| "https://anoma.ly/hex".into()),
+                url: notes_url.unwrap_or_else(|| fork::RELEASES.into()),
             },
         }),
         Decision::Install {
@@ -703,7 +705,7 @@ fn check(
                             .and_then(|target| protocol::resolve_url(&manifest_url, &target.url))
                             .or(manifest.release.notes_url)
                     })
-                    .unwrap_or_else(|| "https://anoma.ly/hex".into());
+                    .unwrap_or_else(|| fork::RELEASES.into());
                 return Ok(State::Download { url });
             }
             let url = protocol::resolve_url(&manifest_url, &target.url)
@@ -714,8 +716,13 @@ fn check(
                 *lock(&shared.state) = State::Downloading;
             }
             transport::prune(&updates, Some(&target.sha256));
-            #[cfg(target_os = "linux")]
-            verify_linux_signature(&manifest, &manifest_url, &user_agent, &target, &updates)?;
+            let signature = Signature {
+                manifest: &manifest,
+                manifest_url: &manifest_url,
+                user_agent: &user_agent,
+                updates: &updates,
+            };
+            signature.verify(platform::TARGET, &target)?;
             let file = transport::download(&url, &user_agent, &target, &updates)?;
             #[cfg(target_os = "windows")]
             let staged = download_console(&manifest, &manifest_url, &user_agent, &updates)
@@ -749,34 +756,38 @@ fn fetch_notes(shared: &Shared, channel: &str, user_agent: &str, updates: &Path,
     *lock(&shared.notes) = notes;
 }
 
-/// Checks the manifest's `<target>-sig` file: Anomaly's release key signing
-/// the SHA-256 the executable is downloaded against. Without it, whoever
-/// controls the manifest could name any executable.
-#[cfg(target_os = "linux")]
-fn verify_linux_signature(
-    manifest: &str,
-    manifest_url: &str,
-    user_agent: &str,
-    target: &protocol::Target,
-    updates: &Path,
-) -> Result<()> {
-    let manifest = protocol::parse_manifest(manifest)
-        .ok_or_else(|| eyre!("the update manifest was rejected: malformed"))?;
-    let signature = manifest
-        .release
-        .target(&platform::signature_target())
-        .ok_or_else(|| eyre!("the Linux update has no signature"))?;
-    if signature.size != 64 {
-        return Err(eyre!("the Linux update's signature is malformed"));
+/// Where a target's `<target>-sig` file comes from.
+struct Signature<'a> {
+    manifest: &'a str,
+    manifest_url: &'a str,
+    user_agent: &'a str,
+    updates: &'a Path,
+}
+
+impl Signature<'_> {
+    /// Checks the manifest's `<name>-sig` file: the fork's update key signing
+    /// the SHA-256 `target` is downloaded against. Without it, whoever
+    /// controls the manifest could name any file.
+    fn verify(&self, name: &str, target: &protocol::Target) -> Result<()> {
+        let manifest = protocol::parse_manifest(self.manifest)
+            .ok_or_else(|| eyre!("the update manifest was rejected: malformed"))?;
+        let signature = manifest
+            .release
+            .target(&fork::signature_target(name))
+            .ok_or_else(|| eyre!("the update has no signature for {name}"))?;
+        if signature.size != 64 {
+            return Err(eyre!("the update's signature for {name} is malformed"));
+        }
+        let url = protocol::resolve_url(self.manifest_url, &signature.url)
+            .ok_or_else(|| eyre!("the signature URL {} is not usable", signature.url))?;
+        let file = transport::download(&url, self.user_agent, signature, self.updates)?;
+        fork::verify(&target.sha256, &std::fs::read(file)?)
     }
-    let url = protocol::resolve_url(manifest_url, &signature.url)
-        .ok_or_else(|| eyre!("the signature URL {} is not usable", signature.url))?;
-    let file = transport::download(&url, user_agent, signature, updates)?;
-    platform::verify_signature(&target.sha256, &std::fs::read(file)?)
 }
 
 /// The release's `hex.com` (`<target>-cli`), checked against the manifest's
-/// size and SHA-256; none when the release has no console entry point.
+/// size, SHA-256, and signature; none when the release has no console entry
+/// point.
 #[cfg(target_os = "windows")]
 fn download_console(
     manifest: &str,
@@ -784,14 +795,21 @@ fn download_console(
     user_agent: &str,
     updates: &Path,
 ) -> Result<Option<PathBuf>> {
-    let Some(manifest) = protocol::parse_manifest(manifest) else {
+    let Some(parsed) = protocol::parse_manifest(manifest) else {
         return Ok(None);
     };
-    let Some(target) = manifest.release.target(platform::CONSOLE_TARGET) else {
+    let Some(target) = parsed.release.target(platform::CONSOLE_TARGET) else {
         return Ok(None);
     };
     let url = protocol::resolve_url(manifest_url, &target.url)
         .ok_or_else(|| eyre!("the hex.com URL {} is not usable", target.url))?;
+    Signature {
+        manifest,
+        manifest_url,
+        user_agent,
+        updates,
+    }
+    .verify(platform::CONSOLE_TARGET, target)?;
     transport::download(&url, user_agent, target, updates).map(Some)
 }
 
@@ -809,16 +827,19 @@ fn replaces_staged(decision: &Decision, staged_sha256: &str) -> bool {
     )
 }
 
-/// `HEX_RELEASE_BASE_URL` (HTTPS only) points a build at another service
-/// origin, for local tests against a fixture service. Nothing defaults to the
-/// service's dev stage, which only tests the service itself.
+/// The channel's manifest: the `<channel>.json` asset of the fork's
+/// `channel-<channel>` pointer release. `HEX_RELEASE_BASE_URL` (HTTPS only)
+/// points a build at another feed, for local tests against a fixture.
 fn manifest_url(channel: &str) -> String {
     let origin = std::env::var("HEX_RELEASE_BASE_URL")
         .ok()
         .filter(|origin| origin.starts_with("https://"));
     format!(
-        "{}/{APP}/{ARTIFACT}/{channel}.json",
-        origin.as_deref().unwrap_or(ORIGIN).trim_end_matches('/')
+        "{}/channel-{channel}/{channel}.json",
+        origin
+            .as_deref()
+            .unwrap_or(fork::FEED)
+            .trim_end_matches('/')
     )
 }
 
@@ -1214,7 +1235,18 @@ mod tests {
     fn the_manifest_url_names_app_artifact_and_channel() {
         assert_eq!(
             manifest_url("stable"),
-            "https://anoma.ly/release/hex/desktop/stable.json"
+            "https://github.com/almatkai/hex/releases/download/channel-stable/stable.json"
+        );
+        // Files the manifest names stay on GitHub, in the versioned release.
+        assert_eq!(
+            protocol::resolve_url(
+                &manifest_url("stable"),
+                "/almatkai/hex/releases/download/v3.4.1/hex-3.4.1-windows-x64.exe"
+            )
+            .as_deref(),
+            Some(
+                "https://github.com/almatkai/hex/releases/download/v3.4.1/hex-3.4.1-windows-x64.exe"
+            )
         );
     }
 }

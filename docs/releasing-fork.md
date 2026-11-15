@@ -1,74 +1,72 @@
-# Releasing Fork (Local Builds)
+# Releasing the fork (local builds, one-click updates)
 
-Hex fork releases (`almatkai/hex`) are built completely from local hardware—Windows locally and macOS arm64 over Tailscale—in strict adherence to the project policy forbidding GitHub Actions build workflows.
+The fork (`almatkai/hex`) is built on local hardware only (Windows here, macOS
+arm64 over Tailscale; never GitHub Actions) and published to its own GitHub
+Releases. Installed copies of Hex read the same releases and update
+themselves: the window shows the update, downloads it in the background and
+offers **Restart to update**. Anomaly's release service is never contacted.
 
-The script `scripts/release-local.ps1` automates building, packaging, and publishing release artifacts.
+```ts
+scripts/release-local.ps1 -Version 3.4.1
+├── build   Windows hex.exe + hex.com here, Hex.app (zip + dmg) on the Mac
+├── sign    every file with secrets/update-signing.key → <file>.sig (ed25519)
+├── publish release v3.4.1: files, .sig files, stable.json, install-hex.ps1
+└── move    prerelease channel-stable: stable.json (the feed Hex reads)
+Installed Hex (src/updater/fork.rs)
+├── every hour + Check for updates: GET releases/download/channel-stable/stable.json
+├── new build? download it, check size + SHA-256 + the .sig against fork::KEY
+└── Restart to update → the new version runs; settings, history, models kept
+```
+
+## How updates are trusted
+
+- The manifest is the Anomaly release protocol's schema 1
+  (`src/updater/protocol.rs`), with every file under the immutable
+  `v<version>` release on github.com.
+- Every target has a `<target>-sig`: the fork's ed25519 key signing
+  `almatkai.hex.update.v1\n<sha256>\n`. Hex refuses a file whose signature
+  doesn't verify against `KEY` in `src/updater/fork.rs`, on every OS, before
+  it runs. Whoever could change a release still can't make Hex run their file.
+- Windows needs no Authenticode and macOS no Developer ID: the fork has
+  neither. macOS still requires an intact ad-hoc signature named
+  `anomaly.hex`.
+- The private key is `secrets/update-signing.key` (git-ignored). **Back it up
+  somewhere safe and never commit it.** Losing it strands every installed copy
+  on its current version; whoever has it can push updates to every user.
+  `hex release-keygen --key <path>` made it once; it refuses to overwrite.
+
+## Installing for the first time
+
+- **Windows:** in PowerShell,
+  `irm https://github.com/almatkai/hex/releases/latest/download/install-hex.ps1 | iex`.
+  It installs into `%APPDATA%\hex\versions\<version>` with the receipt
+  (`install.json`), Start Menu shortcut and `hex` on PATH, then starts Hex.
+  `HEX_INSTALL_CHANNEL=beta` picks another channel, `HEX_UNINSTALL=1` removes
+  it (settings stay).
+- **macOS:** open the `.dmg` and drag Hex to Applications. A copy in a folder
+  you can write to updates itself.
+- Copies built from a checkout (`HEX_LOCAL_BUILD=1`, `HEX_TEST_BUILD=1`) never
+  update; install a release once to start receiving updates.
 
 ## Prerequisites
 
-1. **Branch & State**:
-   - Current branch must be `dev`.
-   - Working tree must be clean (no uncommitted or untracked changes).
-   - Local branch must be up to date with `origin/dev`.
-2. **GitHub Authentication**:
-   - `$env:GH_TOKEN` must be set in the environment (never printed or checked into git). GitHub CLI (`gh`) uses this token to publish releases.
-3. **Antigravity Client Secret**:
-   - `secrets/antigravity-client-secret.txt` must exist and be non-empty on both:
-     - Local machine: `<repo_root>/secrets/antigravity-client-secret.txt`
-     - Remote machine: `~/Desktop/code/hex/secrets/antigravity-client-secret.txt`
-4. **Tailscale & Remote macOS**:
-   - macOS host reachable via SSH (default: `almat@100.67.107.38`).
-   - Repository at `~/Desktop/code/hex` on the macOS host.
-   - Xcode and command-line tools installed at `/Applications/Xcode.app/Contents/Developer`.
-5. **Toolchains**:
-   - Windows: Rust MSVC toolchain (`x86_64-pc-windows-msvc`), Vulkan SDK, `gh` CLI.
-   - macOS: Rust toolchain, Xcode developer tools.
+1. On `dev`, clean, equal to `origin/dev`.
+2. `$env:GH_TOKEN` with write access to the repository (never printed).
+3. `secrets/update-signing.key` and `secrets/antigravity-client-secret.txt`
+   here, and the Antigravity secret in the Mac checkout's `secrets/`.
+4. The Mac reachable over Tailscale (`almat@100.67.107.38`, checkout
+   `~/Desktop/code/hex`, clean), with Xcode.
 
 ## Usage
 
-### 1. Dry Run (Precondition Check & Plan Preview)
-
-Verify all preconditions and preview the release execution plan without performing remote compilation or publishing to GitHub:
-
 ```powershell
-powershell -NoProfile -File scripts/release-local.ps1 -Version 3.4.1 -DryRun
+scripts\release-local.ps1 -Version 3.4.1 -DryRun            # checks + plan only
+scripts\release-local.ps1 -Version 3.4.1                    # stable
+scripts\release-local.ps1 -Version 3.5.0-beta.1 -Channel beta
+scripts\release-local.ps1 -Version 3.4.2 -SkipMac           # Windows only
 ```
 
-### 2. Live Release
-
-When ready to build and publish:
-
-```powershell
-$env:GH_TOKEN = "your_github_token"
-powershell -NoProfile -File scripts/release-local.ps1 -Version 3.4.1
-```
-
-### Optional Parameters
-
-- `-MacHost <string>`: Tailscale SSH host (default: `almat@100.67.107.38`).
-- `-MacRepo <string>`: Remote repository directory (default: `~/Desktop/code/hex`).
-- `-Repo <string>`: Target GitHub repository (default: `almatkai/hex`).
-- `-AllowAnyBranch`: Allow running from a branch other than `dev` (useful for testing).
-
-## Release Process Details
-
-1. **Preconditions**:
-   - Checks branch is `dev`, tree is clean, and commit is synchronized with `origin/dev`.
-   - Verifies `$env:GH_TOKEN` is set.
-   - Verifies client secret files exist on both machines.
-   - Checks that release tag `v<Version>` does not already exist.
-2. **Windows Build**:
-   - Builds `hex.exe` (GUI application) and `hex-console` (installed beside it as `hex.com`).
-   - Environment: `TRANSCRIBE_CMAKE_ARGS='-DGGML_NATIVE=OFF'`, `HEX_VERSION=<Version>`, `HEX_LOCAL_BUILD=1`. A fork build keeps its updater off: otherwise it would replace itself with the upstream (Anomaly) release.
-   - Packages `dist/<Version>/hex-<Version>-windows-x64.zip` containing `hex.exe`, `hex.com`, and package `SHA256SUMS`.
-3. **macOS Build**:
-   - Generates LF/no-BOM shell script and transfers to remote macOS host over Tailscale via `scp`.
-   - Refuses a Mac checkout with uncommitted changes, checks out the exact same commit SHA, and switches back to the previous branch when done.
-   - Builds ad-hoc signed `Hex.app` with `HEX_RELEASE_UNSIGNED=1`, `HEX_LOCAL_BUILD=1` (updates off) and `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer`.
-   - Zips `Hex.app` using `ditto -c -k --keepParent` into `hex-<Version>-macos-arm64.zip`.
-   - Packages `hex-<Version>-macos-arm64.dmg` using `hdiutil` and repo styling.
-   - Copies artifacts back to local `dist/<Version>/`.
-4. **Publish**:
-   - Generates `dist/<Version>/SHA256SUMS` covering this release's Windows and macOS artifacts only.
-   - Generates markdown changelog from `git log` since the previous release tag.
-   - Publishes GitHub Release `v<Version>` with all artifacts and changelog via `gh release create`.
+Use a new version for every release; never replace published files. A
+channel's pointer only moves after its versioned release has every file.
+Versions are never compared: whatever the channel's pointer names is the
+build installed copies take.
