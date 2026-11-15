@@ -80,7 +80,11 @@ $target = 'windows-x64'
 
 $manifestUrl = "$origin/channel-$channel/$channel.json"
 Write-Output "Fetching $manifestUrl..."
-$manifest = (Invoke-WebRequest -Uri $manifestUrl -UseBasicParsing -TimeoutSec 60).Content | ConvertFrom-Json
+# GitHub serves release assets as application/octet-stream, which Windows
+# PowerShell hands back as bytes.
+$response = Invoke-WebRequest -Uri $manifestUrl -UseBasicParsing -TimeoutSec 60
+$text = if ($response.Content -is [byte[]]) { [Text.Encoding]::UTF8.GetString($response.Content) } else { $response.Content }
+$manifest = $text | ConvertFrom-Json
 if ($manifest.schema -ne 1) { throw "Unsupported manifest schema $($manifest.schema)." }
 if ($manifest.app -ne 'hex' -or $manifest.artifact -ne 'desktop' -or $manifest.channel -ne $channel) {
     throw "The manifest is not Hex desktop on the $channel channel."
