@@ -234,6 +234,9 @@ pub enum VocabularyUse {
     None,
 }
 
+mod mlx;
+pub use mlx::MlxArtifact;
+
 #[derive(Clone, Copy)]
 pub enum ModelRuntime {
     Gguf(&'static GgufArtifact),
@@ -241,35 +244,6 @@ pub enum ModelRuntime {
     /// builds with the `mlx` feature only.
     Mlx(&'static MlxArtifact),
     AppleSpeech,
-}
-
-impl ModelRuntime {
-    /// Whether Hex downloads and verifies this model's files (GGUF or MLX),
-    /// rather than the system managing it.
-    pub const fn is_downloaded(self) -> bool {
-        matches!(self, Self::Gguf(_) | Self::Mlx(_))
-    }
-}
-
-/// An MLX model: pinned files in one directory under the models folder.
-/// Each file is a [`GgufArtifact`] in all but name (repository, revision,
-/// size, SHA-256), so it downloads, verifies, and keeps its receipt exactly
-/// as a GGUF file does.
-pub struct MlxArtifact {
-    pub directory: &'static str,
-    pub files: &'static [GgufArtifact],
-}
-
-impl MlxArtifact {
-    pub const fn bytes(&self) -> u64 {
-        let mut total = 0;
-        let mut index = 0;
-        while index < self.files.len() {
-            total += self.files[index].bytes;
-            index += 1;
-        }
-        total
-    }
 }
 
 pub struct GgufArtifact {
@@ -999,12 +973,9 @@ pub fn is_installed(model: &ModelDefinition, language: &str) -> bool {
         ModelRuntime::Gguf(artifact) => model_path(model)
             .and_then(|path| Ok(fs::metadata(path)?.len() == artifact.bytes))
             .unwrap_or(false),
-        ModelRuntime::Mlx(artifact) => model_path(model).is_ok_and(|directory| {
-            artifact.files.iter().all(|file| {
-                fs::metadata(directory.join(file.filename))
-                    .is_ok_and(|metadata| metadata.len() == file.bytes)
-            })
-        }),
+        ModelRuntime::Mlx(artifact) => {
+            model_path(model).is_ok_and(|directory| mlx::installed(&directory, artifact))
+        }
         #[cfg(target_os = "macos")]
         ModelRuntime::AppleSpeech => crate::apple_speech::AppleSpeech::is_ready(language),
         #[cfg(not(target_os = "macos"))]
@@ -1020,10 +991,7 @@ pub fn is_verified(model: &ModelDefinition) -> bool {
         return false;
     };
     if let ModelRuntime::Mlx(artifact) = model.runtime {
-        return artifact
-            .files
-            .iter()
-            .all(|file| artifact_receipt_matches(&path.join(file.filename), file));
+        return mlx::verified(&path, artifact);
     }
     if in_place(&path) {
         return super::found_models::catalog_verified(model);
@@ -1038,7 +1006,7 @@ pub fn verify_installed(model: &ModelDefinition, canceled: &AtomicBool) -> Resul
     }
     let path = model_path(model)?;
     if let ModelRuntime::Mlx(artifact) = model.runtime {
-        verify_mlx_installed_at(&path, artifact, model.name, canceled)?;
+        mlx::verify_installed_at(&path, artifact, model.name, canceled)?;
         return Ok(path);
     }
     // Receipts for found files live with Hex, never beside the file.
@@ -1068,35 +1036,6 @@ fn verify_installed_at(path: &Path, model: &ModelDefinition, canceled: &AtomicBo
     Ok(())
 }
 
-/// Checks every file of an installed MLX model against its pin, hashing
-/// only those whose receipt no longer matches.
-fn verify_mlx_installed_at(
-    directory: &Path,
-    artifact: &MlxArtifact,
-    name: &str,
-    canceled: &AtomicBool,
-) -> Result<()> {
-    check_canceled(canceled)?;
-    if !directory.is_dir() {
-        bail!("{name} is no longer installed. Open Settings to download it.");
-    }
-    let _lock = lock_downloads(directory, canceled)?;
-    for file in artifact.files {
-        let path = directory.join(file.filename);
-        if !path.is_file() {
-            bail!(
-                "{name} is missing {}. Open Settings to download it again.",
-                file.filename
-            );
-        }
-        if !artifact_receipt_matches(&path, file) {
-            verify_artifact(&path, file, name, canceled)?;
-            write_artifact_receipt(&path, file)?;
-        }
-    }
-    Ok(())
-}
-
 /// Deletes a downloaded model with its verification receipt and any partial
 /// download. Refuses instead of waiting while a download owns the directory.
 pub fn remove_installed(model: &ModelDefinition) -> Result<()> {
@@ -1108,7 +1047,7 @@ pub fn remove_installed(model: &ModelDefinition) -> Result<()> {
     }
     let path = model_path(model)?;
     if let ModelRuntime::Mlx(artifact) = model.runtime {
-        return remove_mlx_installed_at(&path, artifact);
+        return mlx::remove_installed_at(&path, artifact);
     }
     // A found file is only forgotten.
     if in_place(&path) {
@@ -1149,23 +1088,6 @@ pub(crate) fn remove_installed_at(path: &Path) -> Result<()> {
         }
     }
     sync_directory(directory)?;
-    Ok(())
-}
-
-/// Deletes an MLX model's files, receipts, and partial downloads, then its
-/// directory once nothing else is in it.
-fn remove_mlx_installed_at(directory: &Path, artifact: &MlxArtifact) -> Result<()> {
-    for file in artifact.files {
-        remove_installed_at(&directory.join(file.filename))?;
-    }
-    if directory.is_dir() {
-        let _ = fs::remove_file(directory.join(".download.lock"));
-        // Refuses while anything unexpected is left, which then stays.
-        let _ = fs::remove_dir(directory);
-        if let Some(parent) = directory.parent() {
-            sync_directory(parent)?;
-        }
-    }
     Ok(())
 }
 
@@ -1279,24 +1201,7 @@ pub fn download_with_stage_progress(
 ) -> Result<PathBuf> {
     let artifact = match model.runtime {
         ModelRuntime::Gguf(artifact) => artifact,
-        ModelRuntime::Mlx(artifact) => {
-            let directory = model_path(model)?;
-            for file in artifact.files {
-                download_artifact_in(
-                    &directory,
-                    file,
-                    model.name,
-                    canceled,
-                    downloaded_bytes,
-                    stage,
-                )?;
-            }
-            downloaded_bytes.store(artifact.bytes(), Ordering::Relaxed);
-            if !speech_detector_installed() {
-                crate::transcription::speech_detector::start_download();
-            }
-            return Ok(directory);
-        }
+        ModelRuntime::Mlx(_) => return mlx::download(model, canceled, downloaded_bytes, stage),
         ModelRuntime::AppleSpeech => bail!("{} is installed and managed by macOS", model.name),
     };
     // An import has nothing to download: Hex checks its own copy. A catalog
@@ -1307,7 +1212,15 @@ pub fn download_with_stage_progress(
         downloaded_bytes.store(artifact.bytes, Ordering::Relaxed);
         path
     } else {
-        download_artifact(artifact, model.name, canceled, downloaded_bytes, stage)?
+        let directory = models_dir()?;
+        download_artifact_in(
+            &directory,
+            artifact,
+            model.name,
+            canceled,
+            downloaded_bytes,
+            stage,
+        )?
     };
     // In the background, so an installed model activates at once even
     // offline. Until the detector lands, dictation and meetings keep their
@@ -1321,7 +1234,8 @@ pub fn download_with_stage_progress(
 /// Downloads the speech detector unless a verified copy is installed.
 #[cfg_attr(test, allow(dead_code))]
 pub fn download_speech_detector(canceled: &AtomicBool) -> Result<PathBuf> {
-    download_artifact(
+    download_artifact_in(
+        &models_dir()?,
         &SPEECH_DETECTOR_ARTIFACT,
         SPEECH_DETECTOR_NAME,
         canceled,
@@ -1340,23 +1254,6 @@ pub fn speech_detector_installed() -> bool {
     speech_detector_path()
         .and_then(|path| Ok(fs::metadata(path)?.len() == SPEECH_DETECTOR_ARTIFACT.bytes))
         .unwrap_or(false)
-}
-
-fn download_artifact(
-    artifact: &GgufArtifact,
-    name: &str,
-    canceled: &AtomicBool,
-    downloaded_bytes: &AtomicU64,
-    stage: &AtomicU8,
-) -> Result<PathBuf> {
-    download_artifact_in(
-        &models_dir()?,
-        artifact,
-        name,
-        canceled,
-        downloaded_bytes,
-        stage,
-    )
 }
 
 /// Downloads `artifact` into `directory` (the models folder, or an MLX
