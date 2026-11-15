@@ -13,13 +13,14 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use super::artifacts::{
-    COHERE_ARTIFACT, COHERE_LANGUAGES, GIGAAM_MULTILINGUAL_ARTIFACT, GIGAAM_V3_E2E_RNNT_ARTIFACT,
-    GRANITE_SPEECH_5_ARTIFACT, GRANITE_SPEECH_5_LANGUAGES, IVRIT_WHISPER_ARTIFACT,
-    NB_WHISPER_MEDIUM_ARTIFACT, NEMOTRON_3_5_ASR_ARTIFACT, NEMOTRON_3_5_LANGUAGES,
-    NEMOTRON_3_5_LOCALES, ORUKEET_ARTIFACT, PARAKEET_ULTRA_ARTIFACT,
-    PARAKEET_UNIFIED_ENGLISH_ARTIFACT, PARAKEET_V2_ARTIFACT, PARAKEET_V3_ARTIFACT,
-    PARAKEET_V3_LANGUAGES, QWEN_ARTIFACT, QWEN_LANGUAGES, QWENCLEO_ARTIFACT, SENSEVOICE_ARTIFACT,
-    UNDERDOG_BARK_3_CLEAN_ARTIFACT, UNDERDOG_BARK_3_PRO_ARTIFACT, WHISPER_ARTIFACT,
+    COHERE_ARTIFACT, COHERE_LANGUAGES, GIGAAM_MULTILINGUAL_ARTIFACT,
+    GIGAAM_MULTILINGUAL_MLX_ARTIFACT, GIGAAM_V3_E2E_RNNT_ARTIFACT, GRANITE_SPEECH_5_ARTIFACT,
+    GRANITE_SPEECH_5_LANGUAGES, IVRIT_WHISPER_ARTIFACT, NB_WHISPER_MEDIUM_ARTIFACT,
+    NEMOTRON_3_5_ASR_ARTIFACT, NEMOTRON_3_5_LANGUAGES, NEMOTRON_3_5_LOCALES, ORUKEET_ARTIFACT,
+    PARAKEET_ULTRA_ARTIFACT, PARAKEET_UNIFIED_ENGLISH_ARTIFACT, PARAKEET_V2_ARTIFACT,
+    PARAKEET_V3_ARTIFACT, PARAKEET_V3_LANGUAGES, QWEN_ARTIFACT, QWEN_LANGUAGES, QWENCLEO_ARTIFACT,
+    SENSEVOICE_ARTIFACT, UNDERDOG_BARK_3_CLEAN_ARTIFACT, UNDERDOG_BARK_3_PRO_ARTIFACT,
+    WHISPER_ARTIFACT,
 };
 pub use super::custom_models::CustomModelId;
 pub use super::languages::{LANGUAGES, language_name};
@@ -49,6 +50,9 @@ pub enum TranscriptionModelId {
     Nemotron35Asr,
     GigaAmV3,
     GigaAmMultilingual,
+    /// GigaAM Multilingual on MLX: decodes on every OS, available only on
+    /// Apple Silicon builds with MLX and its Lab on.
+    GigaAmMultilingualMlx,
     NbWhisperMedium,
     GraniteSpeech5,
     AppleSpeech,
@@ -87,6 +91,7 @@ impl TranscriptionModelId {
             Self::Nemotron35Asr => "nemotron_3_5_asr",
             Self::GigaAmV3 => "gigaam_v3",
             Self::GigaAmMultilingual => "gigaam_multilingual",
+            Self::GigaAmMultilingualMlx => "gigaam_multilingual_mlx",
             Self::NbWhisperMedium => "nb_whisper_medium",
             Self::GraniteSpeech5 => "granite_speech_5",
             Self::AppleSpeech => "apple_speech",
@@ -98,11 +103,14 @@ impl TranscriptionModelId {
         matches!(self, Self::Custom(_))
     }
 
-    /// A model behind its own Labs toggle: an import, or Parakeet Ultra. A
-    /// saved choice of one stays saved while it can't run, and the listener
-    /// runs a fallback (`custom_models::runnable`).
+    /// A model behind its own Labs toggle: an import, Parakeet Ultra, or
+    /// GigaAM Multilingual (MLX). A saved choice of one stays saved while it
+    /// can't run, and the listener runs a fallback (`custom_models::runnable`).
     pub const fn is_labs_gated(self) -> bool {
-        matches!(self, Self::Custom(_) | Self::ParakeetUltra)
+        matches!(
+            self,
+            Self::Custom(_) | Self::ParakeetUltra | Self::GigaAmMultilingualMlx
+        )
     }
 }
 
@@ -127,6 +135,7 @@ impl FromStr for TranscriptionModelId {
             "nemotron_3_5_asr" => Ok(Self::Nemotron35Asr),
             "gigaam_v3" => Ok(Self::GigaAmV3),
             "gigaam_multilingual" => Ok(Self::GigaAmMultilingual),
+            "gigaam_multilingual_mlx" => Ok(Self::GigaAmMultilingualMlx),
             "nb_whisper_medium" => Ok(Self::NbWhisperMedium),
             "granite_speech_5" => Ok(Self::GraniteSpeech5),
             "apple_speech" => Ok(Self::AppleSpeech),
@@ -225,9 +234,15 @@ pub enum VocabularyUse {
     None,
 }
 
+mod mlx;
+pub use mlx::MlxArtifact;
+
 #[derive(Clone, Copy)]
 pub enum ModelRuntime {
     Gguf(&'static GgufArtifact),
+    /// A directory of pinned files run by MLX (`gigaam_mlx`); Apple Silicon
+    /// builds with the `mlx` feature only.
+    Mlx(&'static MlxArtifact),
     AppleSpeech,
 }
 
@@ -262,6 +277,8 @@ impl ModelDefinition {
                 crate::labs::parakeet_ultra()
             }
             (ModelRuntime::Gguf(_), _) => true,
+            // Off wherever MLX isn't built in, whatever the saved toggle says.
+            (ModelRuntime::Mlx(_), _) => crate::labs::gigaam_mlx(),
         }
     }
 
@@ -336,12 +353,12 @@ impl ModelDefinition {
     }
 
     pub fn size_label(&self) -> String {
-        match self.runtime {
-            ModelRuntime::AppleSpeech => "Managed".into(),
-            ModelRuntime::Gguf(artifact) if artifact.bytes >= 1_000_000_000 => {
-                format!("{:.1} GB", artifact.bytes as f64 / 1_000_000_000.0)
+        match self.download_bytes() {
+            None => "Managed".into(),
+            Some(bytes) if bytes >= 1_000_000_000 => {
+                format!("{:.1} GB", bytes as f64 / 1_000_000_000.0)
             }
-            ModelRuntime::Gguf(artifact) => format!("{} MB", artifact.bytes / 1_000_000),
+            Some(bytes) => format!("{} MB", bytes / 1_000_000),
         }
     }
 
@@ -383,6 +400,7 @@ impl ModelDefinition {
     pub const fn download_bytes(&self) -> Option<u64> {
         match self.runtime {
             ModelRuntime::Gguf(artifact) => Some(artifact.bytes),
+            ModelRuntime::Mlx(artifact) => Some(artifact.bytes()),
             ModelRuntime::AppleSpeech => None,
         }
     }
@@ -612,6 +630,21 @@ pub const MODELS: &[ModelDefinition] = &[
         word_error_rate: None,
         streams: false,
         runtime: ModelRuntime::Gguf(&GIGAAM_MULTILINGUAL_ARTIFACT),
+        languages: &["ru", "kk", "ky", "uz", "en"],
+        accepts_language_hint: false,
+        supports_language_detection: false,
+    },
+    ModelDefinition {
+        id: TranscriptionModelId::GigaAmMultilingualMlx,
+        // The same weights as the GGUF entry above, run by MLX on Apple
+        // Silicon (Labs; docs/plans/gigaam-mlx.md), so the two compare
+        // side by side. Never recommended.
+        name: "GigaAM Multilingual (MLX)",
+        // Hex has not measured this model's speed or error rate.
+        realtime: "",
+        word_error_rate: None,
+        streams: false,
+        runtime: ModelRuntime::Mlx(&GIGAAM_MULTILINGUAL_MLX_ARTIFACT),
         languages: &["ru", "kk", "ky", "uz", "en"],
         accepts_language_hint: false,
         supports_language_detection: false,
@@ -902,8 +935,13 @@ pub fn max_audio_chunk_samples(
 }
 
 pub fn model_path(model: &ModelDefinition) -> Result<PathBuf> {
-    let ModelRuntime::Gguf(artifact) = model.runtime else {
-        bail!("{} is managed by macOS and has no model path", model.name);
+    let artifact = match model.runtime {
+        ModelRuntime::Gguf(artifact) => artifact,
+        // The directory MLX loads; Hex never adopts another app's copy.
+        ModelRuntime::Mlx(artifact) => return Ok(models_dir()?.join(artifact.directory)),
+        ModelRuntime::AppleSpeech => {
+            bail!("{} is managed by macOS and has no model path", model.name)
+        }
     };
     let managed = models_dir()?.join(artifact.filename);
     // A catalog model another app downloaded (one already in use, or an
@@ -935,6 +973,9 @@ pub fn is_installed(model: &ModelDefinition, language: &str) -> bool {
         ModelRuntime::Gguf(artifact) => model_path(model)
             .and_then(|path| Ok(fs::metadata(path)?.len() == artifact.bytes))
             .unwrap_or(false),
+        ModelRuntime::Mlx(artifact) => {
+            model_path(model).is_ok_and(|directory| mlx::installed(&directory, artifact))
+        }
         #[cfg(target_os = "macos")]
         ModelRuntime::AppleSpeech => crate::apple_speech::AppleSpeech::is_ready(language),
         #[cfg(not(target_os = "macos"))]
@@ -949,6 +990,9 @@ pub fn is_verified(model: &ModelDefinition) -> bool {
     let Ok(path) = model_path(model) else {
         return false;
     };
+    if let ModelRuntime::Mlx(artifact) = model.runtime {
+        return mlx::verified(&path, artifact);
+    }
     if in_place(&path) {
         return super::found_models::catalog_verified(model);
     }
@@ -961,6 +1005,10 @@ pub fn verify_installed(model: &ModelDefinition, canceled: &AtomicBool) -> Resul
         return super::custom_models::verify(id, canceled);
     }
     let path = model_path(model)?;
+    if let ModelRuntime::Mlx(artifact) = model.runtime {
+        mlx::verify_installed_at(&path, artifact, model.name, canceled)?;
+        return Ok(path);
+    }
     // Receipts for found files live with Hex, never beside the file.
     if in_place(&path) {
         return super::found_models::adopt_catalog(model, &path, canceled);
@@ -994,10 +1042,13 @@ pub fn remove_installed(model: &ModelDefinition) -> Result<()> {
     if let TranscriptionModelId::Custom(id) = model.id {
         return super::custom_models::remove(id);
     }
-    if !matches!(model.runtime, ModelRuntime::Gguf(_)) {
+    if !model.runtime.is_downloaded() {
         bail!("{} is managed by macOS and cannot be deleted", model.name);
     }
     let path = model_path(model)?;
+    if let ModelRuntime::Mlx(artifact) = model.runtime {
+        return mlx::remove_installed_at(&path, artifact);
+    }
     // A found file is only forgotten.
     if in_place(&path) {
         return super::found_models::forget_catalog(model);
@@ -1148,8 +1199,10 @@ pub fn download_with_stage_progress(
     downloaded_bytes: &AtomicU64,
     stage: &AtomicU8,
 ) -> Result<PathBuf> {
-    let ModelRuntime::Gguf(artifact) = model.runtime else {
-        bail!("{} is installed and managed by macOS", model.name);
+    let artifact = match model.runtime {
+        ModelRuntime::Gguf(artifact) => artifact,
+        ModelRuntime::Mlx(_) => return mlx::download(model, canceled, downloaded_bytes, stage),
+        ModelRuntime::AppleSpeech => bail!("{} is installed and managed by macOS", model.name),
     };
     // An import has nothing to download: Hex checks its own copy. A catalog
     // model another app already downloaded is checked and used where it is.
@@ -1159,7 +1212,15 @@ pub fn download_with_stage_progress(
         downloaded_bytes.store(artifact.bytes, Ordering::Relaxed);
         path
     } else {
-        download_artifact(artifact, model.name, canceled, downloaded_bytes, stage)?
+        let directory = models_dir()?;
+        download_artifact_in(
+            &directory,
+            artifact,
+            model.name,
+            canceled,
+            downloaded_bytes,
+            stage,
+        )?
     };
     // In the background, so an installed model activates at once even
     // offline. Until the detector lands, dictation and meetings keep their
@@ -1173,7 +1234,8 @@ pub fn download_with_stage_progress(
 /// Downloads the speech detector unless a verified copy is installed.
 #[cfg_attr(test, allow(dead_code))]
 pub fn download_speech_detector(canceled: &AtomicBool) -> Result<PathBuf> {
-    download_artifact(
+    download_artifact_in(
+        &models_dir()?,
         &SPEECH_DETECTOR_ARTIFACT,
         SPEECH_DETECTOR_NAME,
         canceled,
@@ -1194,7 +1256,10 @@ pub fn speech_detector_installed() -> bool {
         .unwrap_or(false)
 }
 
-fn download_artifact(
+/// Downloads `artifact` into `directory` (the models folder, or an MLX
+/// model's own directory under it) unless a verified copy is there.
+fn download_artifact_in(
+    directory: &Path,
     artifact: &GgufArtifact,
     name: &str,
     canceled: &AtomicBool,
@@ -1203,7 +1268,7 @@ fn download_artifact(
 ) -> Result<PathBuf> {
     ModelPreparationStage::Downloading.store(stage);
     check_canceled(canceled)?;
-    let directory = models_dir()?;
+    let directory = directory.to_path_buf();
     fs::create_dir_all(&directory)?;
     let _lock = lock_downloads(&directory, canceled)?;
     check_canceled(canceled)?;
@@ -1636,6 +1701,137 @@ mod tests {
     }
 
     #[test]
+    fn gigaam_mlx_is_a_labs_gated_twin_of_the_gguf_entry() {
+        let gguf = definition(TranscriptionModelId::GigaAmMultilingual);
+        let mlx = definition(TranscriptionModelId::GigaAmMultilingualMlx);
+        assert_eq!(mlx.languages, gguf.languages);
+        assert_eq!(mlx.language_choices(), gguf.language_choices());
+        assert!(!mlx.streams && !mlx.accepts_language_hint);
+        assert!(!mlx.supports_language_detection);
+        assert_eq!(mlx.vocabulary_use(), VocabularyUse::None);
+        assert!(mlx.id.is_labs_gated());
+        assert_eq!(mlx.available(), crate::labs::gigaam_mlx());
+        if !cfg!(hex_mlx) {
+            assert!(!mlx.available(), "MLX is not built into this binary");
+        }
+        let ModelRuntime::Mlx(artifact) = mlx.runtime else {
+            panic!("an MLX artifact");
+        };
+        assert!(mlx.runtime.is_downloaded());
+        assert_eq!(artifact.bytes(), 1_149 + 2_232 + 698_960_933);
+        assert_eq!(mlx.download_bytes(), Some(artifact.bytes()));
+        assert_eq!(mlx.size_label(), "698 MB");
+        let names: Vec<_> = artifact.files.iter().map(|file| file.filename).collect();
+        assert_eq!(names, ["config.json", "manifest.json", "model.safetensors"]);
+        for file in artifact.files {
+            assert_eq!(file.sha256.len(), 64);
+            assert_eq!(file.revision.len(), 40, "pinned by commit, not tag");
+            assert!(file.download_url().starts_with(
+                "https://huggingface.co/ai-babai/gigaam-multilingual-mlx-int8-g64/resolve/"
+            ));
+        }
+        for language in mlx.languages.iter().copied().chain([AUTO_LANGUAGE]) {
+            assert!(
+                choices_for_runtime(language)
+                    .iter()
+                    .all(|choice| choice.model.id != mlx.id),
+                "MLX is never recommended ({language})"
+            );
+        }
+        let saved = TranscriptionSelection {
+            model: mlx.id,
+            language: "kk".into(),
+        };
+        assert!(validate_saved(&saved).is_ok());
+        if !mlx.available() {
+            assert!(validate(&saved).is_err());
+            assert_eq!(
+                super::super::custom_models::runnable(&saved),
+                super::super::custom_models::fallback()
+            );
+            assert!(
+                picker_models("kk")
+                    .iter()
+                    .all(|(model, _)| model.id != mlx.id)
+            );
+        }
+    }
+
+    #[test]
+    fn an_mlx_model_installs_verifies_and_removes_as_one_directory() {
+        const FILES: &[GgufArtifact] = &[
+            GgufArtifact {
+                filename: "config.json",
+                revision: "fixture",
+                repository: "fixture",
+                bytes: 5,
+                sha256: "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824",
+                architecture: "fixture",
+                variant: "fixture",
+            },
+            GgufArtifact {
+                filename: "model.safetensors",
+                revision: "fixture",
+                repository: "fixture",
+                bytes: 5,
+                sha256: "486ea46224d1bb4fb680f34f7c9ad96a8f24ec88be73ea8e5a6c65260e9cb8a7",
+                architecture: "fixture",
+                variant: "fixture",
+            },
+        ];
+        const ARTIFACT: MlxArtifact = MlxArtifact {
+            directory: "fixture-mlx",
+            files: FILES,
+        };
+        let model = ModelDefinition {
+            runtime: ModelRuntime::Mlx(&ARTIFACT),
+            ..*definition(TranscriptionModelId::GigaAmMultilingualMlx)
+        };
+        let root = std::env::temp_dir().join(format!(
+            "hex-mlx-install-{}-{}",
+            std::process::id(),
+            NEXT_TEMP_FILE.fetch_add(1, Ordering::Relaxed)
+        ));
+        fs::create_dir_all(&root).unwrap();
+        set_test_models_dir(Some(root.clone()));
+        let directory = model_path(&model).unwrap();
+        assert_eq!(directory, root.join("fixture-mlx"));
+        assert!(!is_installed(&model, "kk"));
+        assert!(verify_installed(&model, &AtomicBool::new(false)).is_err());
+
+        fs::create_dir_all(&directory).unwrap();
+        fs::write(directory.join("config.json"), "hello").unwrap();
+        assert!(!is_installed(&model, "kk"), "one file is still missing");
+        fs::write(directory.join("model.safetensors"), "world").unwrap();
+        assert!(is_installed(&model, "kk"));
+        assert!(!is_verified(&model));
+        assert_eq!(
+            verify_installed(&model, &AtomicBool::new(false)).unwrap(),
+            directory
+        );
+        assert!(is_verified(&model));
+
+        // A changed file fails its pin even at the right size.
+        let weights = directory.join("model.safetensors");
+        fs::write(&weights, "WORLD").unwrap();
+        // A distinct time, whatever the file system's clock resolution.
+        File::options()
+            .write(true)
+            .open(&weights)
+            .unwrap()
+            .set_modified(UNIX_EPOCH + Duration::from_secs(1_000_000))
+            .unwrap();
+        assert!(!is_verified(&model));
+        assert!(verify_installed(&model, &AtomicBool::new(false)).is_err());
+
+        remove_installed(&model).unwrap();
+        assert!(!directory.exists());
+        assert!(!is_installed(&model, "kk"));
+        set_test_models_dir(None);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
     fn multilingual_gigaam_chunks_at_25_seconds_without_changing_v3() {
         let variant = "gigaam-multilingual-large-ctc";
         for limit in [0, -1, 400_000] {
@@ -1794,7 +1990,9 @@ mod tests {
             .filter(|model| model.streams)
             .map(|model| match model.runtime {
                 ModelRuntime::Gguf(artifact) => artifact.variant,
-                ModelRuntime::AppleSpeech => panic!("a streaming model has a GGUF artifact"),
+                ModelRuntime::Mlx(_) | ModelRuntime::AppleSpeech => {
+                    panic!("a streaming model has a GGUF artifact")
+                }
             })
             .collect::<Vec<_>>();
         assert_eq!(
@@ -1862,6 +2060,10 @@ mod tests {
             (
                 TranscriptionModelId::GigaAmMultilingual,
                 "gigaam_multilingual",
+            ),
+            (
+                TranscriptionModelId::GigaAmMultilingualMlx,
+                "gigaam_multilingual_mlx",
             ),
             (TranscriptionModelId::NbWhisperMedium, "nb_whisper_medium"),
             (TranscriptionModelId::AppleSpeech, "apple_speech"),

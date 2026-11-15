@@ -12,7 +12,7 @@ use crate::rune_ui::Ui;
 use crate::rune_ui::controls::{ButtonKind, Paint, PushSize, button};
 use crate::rune_ui::lists::group_label;
 use crate::transcription::models::{
-    self as transcription_models, AUTO_LANGUAGE, ModelRuntime, TranscriptionModelId, language_name,
+    self as transcription_models, AUTO_LANGUAGE, TranscriptionModelId, language_name,
 };
 
 const PROGRESS_WIDTH: f32 = 196.0;
@@ -340,8 +340,7 @@ fn model_row(ui: &Ui, p: Paint, entry: &Entry, language: &str) -> El {
 /// used in place; the first press arms it.
 fn delete_button(ui: &Ui, p: Paint, entry: &Entry, free: bool) -> Option<El> {
     let def = entry.def;
-    let deletable =
-        entry.state == State::Downloaded && free && matches!(def.runtime, ModelRuntime::Gguf(_));
+    let deletable = entry.state == State::Downloaded && free && def.runtime.is_downloaded();
     if !deletable {
         return None;
     }

@@ -458,6 +458,11 @@ pub fn apply(
                 return Err(invalid(name, why));
             }
         }
+        "labs.gigaam_mlx" if !candidate.labs.gigaam_mlx => {
+            if let Some(why) = crate::labs::Feature::GigaAmMlx.off_refusal(settings) {
+                return Err(invalid(name, why));
+            }
+        }
         "history_retention" => effects.push(Effect::HistoryRetention(candidate.history_retention)),
         "show_dock_icon" => effects.push(Effect::DockIcon),
         "updates.channel" => effects.push(Effect::CheckForUpdates),

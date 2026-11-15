@@ -327,7 +327,7 @@ fn catalog_found(
     let definition = super::models::definition(model);
     let (architecture, variant) = match definition.runtime {
         ModelRuntime::Gguf(artifact) => (artifact.architecture, artifact.variant),
-        ModelRuntime::AppleSpeech => ("", ""),
+        ModelRuntime::Mlx(_) | ModelRuntime::AppleSpeech => ("", ""),
     };
     Found {
         path: path.to_path_buf(),
@@ -737,7 +737,7 @@ mod tests {
             .filter(|model| !model.id.is_custom())
             .filter_map(|model| match model.runtime {
                 ModelRuntime::Gguf(artifact) => Some((model, artifact)),
-                ModelRuntime::AppleSpeech => None,
+                ModelRuntime::Mlx(_) | ModelRuntime::AppleSpeech => None,
             })
             .min_by_key(|(_, artifact)| artifact.bytes)
             .unwrap();
@@ -795,7 +795,7 @@ mod tests {
             .filter(|model| !model.id.is_custom())
             .filter_map(|model| match model.runtime {
                 ModelRuntime::Gguf(artifact) => Some((model, artifact)),
-                ModelRuntime::AppleSpeech => None,
+                ModelRuntime::Mlx(_) | ModelRuntime::AppleSpeech => None,
             })
             .min_by_key(|(_, artifact)| artifact.bytes)
             .unwrap();

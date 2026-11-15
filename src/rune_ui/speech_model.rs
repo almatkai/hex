@@ -10,7 +10,7 @@ use super::settings::toggle_menu;
 use super::{Menu, Ui};
 use crate::app_settings::KeyboardModelChoice;
 use crate::desktop::i18n::tr;
-use crate::transcription::models::{self as transcription_models, ModelDefinition, ModelRuntime};
+use crate::transcription::models::{self as transcription_models, ModelDefinition};
 
 /// Whether the Modes pane offers a speech choice per mode: Labs › Switch
 /// model with app is on where the runtime can follow the frontmost app.
@@ -71,7 +71,7 @@ pub(super) fn setting(
     for model in transcription_models::all_models() {
         let fallback = ui.settings.transcription_for_model(model.id).language;
         if !model.available()
-            || !matches!(model.runtime, ModelRuntime::Gguf(_))
+            || !model.runtime.is_downloaded()
             || !ui.picker.installed(model, &fallback)
         {
             continue;

@@ -858,6 +858,24 @@ fn rows(ui: &Ui) -> Vec<Row> {
             ..ultra
         }
     });
+    // Apple Silicon builds with MLX only, so no other OS's golden changes.
+    if Feature::GigaAmMlx.on_this_os() {
+        let mlx = row(Feature::GigaAmMlx, None, "GigaAM Multilingual (MLX)", "");
+        let mlx_locked = !mlx.locked && Feature::GigaAmMlx.off_refusal(&ui.settings).is_some();
+        rows.push(if mlx.locked {
+            mlx
+        } else {
+            Row {
+                locked: mlx_locked,
+                about: if mlx_locked {
+                    tr("On while it is the dictation model. Choose another model to turn it off.")
+                } else {
+                    tr("Offer GigaAM Multilingual on Apple's MLX, beside its GGUF build, in the Local transcription picker")
+                },
+                ..mlx
+            }
+        });
+    }
     if caps.share_shortcut {
         rows.push(row(
             Feature::ShareShortcut,
@@ -958,6 +976,7 @@ fn row_key(lab: Lab) -> &'static str {
         Feature::DoubleTapModifiers => "lab-double-tap-modifiers",
         Feature::BenchmarkDetails => "lab-benchmark-details",
         Feature::ParakeetUltra => "lab-parakeet-ultra",
+        Feature::GigaAmMlx => "lab-gigaam-mlx",
         Feature::StandaloneSpecialKeys => "lab-special-keys",
         Feature::HistoryStats => "lab-history-stats",
         Feature::RecentDictations => "lab-recent-dictations",

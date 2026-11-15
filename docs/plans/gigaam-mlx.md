@@ -1,4 +1,37 @@
-# GigaAM Multilingual on MLX (macOS) — design, not implemented
+# GigaAM Multilingual on MLX (macOS) — wired in, not yet built on a Mac
+
+## Status (2026-11-15)
+
+Wired into Hex behind the `mlx` cargo feature and Labs › GigaAM
+Multilingual (MLX) (`labs.gigaam_mlx`, off by default). Written and
+checked on Windows only: the Windows build and tests pass and are
+unaffected, but **no line of the MLX path (CMake, C++, FFI, Transcriber)
+has been compiled or run.** The Mac checklist is at the end ("Mac
+verification checklist").
+
+```ts
+Done (this branch)
+├── Cargo feature `mlx` → build.rs compile_gigaam_mlx (aarch64 macOS only)
+│   ├── CMake: MLX v0.32.4 + native/gigaam_mlx, static, cfg(hex_mlx)
+│   └── mlx.metallib → OUT_DIR (HEX_MLX_METALLIB) and target/<profile>/
+├── scripts/build-app.sh: HEX_CARGO_FEATURES=mlx passes --features and
+│   copies mlx.metallib to Contents/Resources
+├── Lab GigaAmMlx: key labs.gigaam_mlx, group Models, audience Everyone,
+│   on_this_os = cfg!(hex_mlx), off_refusal while it is the dictation model
+├── Catalog: TranscriptionModelId::GigaAmMultilingualMlx
+│   ("gigaam_multilingual_mlx"), ModelRuntime::Mlx(&MlxArtifact),
+│   three SHA-256-pinned files in models/gigaam-multilingual-mlx-int8-g64/,
+│   downloaded, receipted, verified, and removed per file; never recommended;
+│   available() = labs::gigaam_mlx() (always false off hex_mlx builds)
+├── Runtime: Transcriber::Mlx (cfg(hex_mlx)) via gigaam_mlx::Loaded;
+│   engine::held and meetings share it (Transcriber::in_process)
+└── Benchmark: hex benchmark-transcription --backend mlx --model <dir>
+Not done
+├── model_details credit (licence links unverified), THIRD_PARTY_NOTICES
+├── validate-app.sh check for the metallib; CI Metal toolchain (Dax)
+├── translations of the Lab's description (falls back to English)
+└── cancellation (a never-set flag, as planned for v1)
+```
 
 Goal: on Apple Silicon Macs, run ai-sage's GigaAM-Multilingual (600M
 Conformer, char-wise CTC, MIT) through MLX with ai-babai's converted
@@ -528,3 +561,43 @@ Total                                                  ~2–3 weeks on a Mac
    number others can reproduce.
 6. Is `ky`/`uz` support wanted in the picker, or only `ru`/`kk`? It changes
    nothing at run time (no language input) and only what Settings lists.
+
+## Mac verification checklist
+
+On an Apple Silicon Mac with Xcode (and its Metal toolchain), from the
+branch `t3/gigaam-mlx-runtime-wired`:
+
+```sh
+xcodebuild -downloadComponent MetalToolchain   # once, if `xcrun metal` is missing
+./scripts/setup.sh
+
+# 1. Feature off: the default build must be unchanged.
+cargo build --locked --release --bin hex
+cargo test --locked --bin hex
+
+# 2. Feature on: MLX + native/gigaam_mlx compile and link (minutes, cold).
+cargo build --locked --release --features mlx --bin hex
+ls target/release/mlx.metallib
+cargo clippy --locked --features mlx --bin hex -- -D warnings
+cargo test --locked --features mlx --bin hex gigaam_mlx
+
+# 3. Benchmark the MLX backend (artifact from huggingface.co/
+#    ai-babai/gigaam-multilingual-mlx-int8-g64 at 03a2921c…, or via the app).
+cargo run --release --features mlx -- benchmark-transcription manifest.json \
+  --backend mlx --model ~/Library/Application\ Support/hex/models/gigaam-multilingual-mlx-int8-g64
+
+# 4. Parity with the Python reference (Phase 1).
+HEX_GIGAAM_MLX_MODEL=<dir> HEX_GIGAAM_MLX_REFERENCE=<ref dir> HEX_GIGAAM_MLX_CLIPS=<wavs> \
+  cargo test --release --features mlx --bin hex gigaam_mlx -- --ignored
+
+# 5. The app.
+HEX_CARGO_FEATURES=mlx HEX_RELEASE_UNSIGNED=1 HEX_LOCAL_BUILD=1 ./scripts/build-app.sh
+ls target/app/Hex.app/Contents/Resources/mlx.metallib
+```
+
+Then in Hex: Labs › Models › GigaAM Multilingual (MLX) on; pick
+"GigaAM Multilingual (MLX)" for Kazakh or Russian; it downloads 699 MB;
+dictate; switch back to the GGUF entry (no second copy held; a failed
+MLX load keeps the old choice); turning the Lab off is refused while it is
+the dictation model. Expect compile errors in `gigaam_mlx.cpp` first
+(see Risks).

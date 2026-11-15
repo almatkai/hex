@@ -1,6 +1,8 @@
 # gigaam_mlx: GigaAM-Multilingual on MLX, built by build.rs through the
-# `cmake` crate on aarch64 macOS only. SKELETON, UNTESTED.
-# See docs/plans/gigaam-mlx.md ("Build").
+# `cmake` crate with the off-by-default `mlx` feature, aarch64 macOS only.
+# UNVERIFIED: not yet configured or built on a Mac; see
+# docs/plans/gigaam-mlx.md ("Verification"). ASSUMPTION: a
+# CMAKE_OSX_DEPLOYMENT_TARGET >= 26.2 turns on MLX's NAX (M5) kernels.
 cmake_minimum_required(VERSION 3.24)
 project(gigaam_mlx LANGUAGES C CXX OBJC OBJCXX)
 
@@ -46,7 +48,5 @@ target_include_directories(gigaam_mlx PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(gigaam_mlx PRIVATE mlx)
 
 install(TARGETS gigaam_mlx ARCHIVE DESTINATION lib)
-# ASSUMPTION: MLX's static target is `mlx` and its metallib lands in
-# ${mlx_BINARY_DIR}/mlx/backend/metal/kernels/mlx.metallib. build.rs links
-# libmlx.a from the build tree and copies the metallib into OUT_DIR.
-install(FILES ${mlx_BINARY_DIR}/mlx/backend/metal/kernels/mlx.metallib DESTINATION lib OPTIONAL)
+# MLX's own install rules put libmlx.a and mlx.metallib in the same lib/,
+# which build.rs links from and points HEX_MLX_METALLIB at.

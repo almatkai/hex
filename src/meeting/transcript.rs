@@ -833,10 +833,9 @@ impl ChunkModel {
 /// behind it.
 #[cfg(target_os = "macos")]
 fn engine_model(model: &mut crate::transcription::engine::Model) -> Option<&mut Transcriber> {
-    match model.active() {
-        Some(transcriber @ Transcriber::Gguf(_)) => Some(transcriber),
-        _ => None,
-    }
+    model
+        .active()
+        .filter(|transcriber| transcriber.in_process())
 }
 
 #[cfg(not(target_os = "macos"))]

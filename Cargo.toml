@@ -23,12 +23,19 @@ harness = false
 
 [build-dependencies]
 cc = "1"
+# The `mlx` feature's CMake build (native/gigaam_mlx). A plain table: target
+# tables for build-dependencies match the host, not the target.
+cmake = { version = "0.1", optional = true }
 
 [target.'cfg(windows)'.build-dependencies]
 embed-resource = "3"
 
 [features]
 onnx-benchmark = ["dep:transcribe-rs"]
+# GigaAM Multilingual on MLX (Apple Silicon macOS only; a no-op elsewhere).
+# Off by default: it builds MLX from source (minutes, cold) and needs Xcode's
+# Metal toolchain. See docs/plans/gigaam-mlx.md.
+mlx = ["dep:cmake"]
 
 # Full debug info made each dev/test build ~19 GB per worktree. Line tables keep
 # function names and file:line in backtraces; dependencies carry none.

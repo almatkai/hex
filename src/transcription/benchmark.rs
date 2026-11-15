@@ -14,11 +14,20 @@ use crate::parakeet::Parakeet;
 
 pub enum Backend {
     Onnx,
-    TranscribeCpp { model: PathBuf },
+    TranscribeCpp {
+        model: PathBuf,
+    },
+    /// GigaAM Multilingual on MLX, from an artifact directory.
+    #[cfg(hex_mlx)]
+    Mlx {
+        model: PathBuf,
+    },
 }
 
 enum LoadedBackend {
     TranscribeCpp(Box<Parakeet>),
+    #[cfg(hex_mlx)]
+    Mlx(Box<crate::gigaam_mlx::GigaAmMlx>),
     #[cfg(feature = "onnx-benchmark")]
     Onnx(transcribe_rs::onnx::parakeet::ParakeetModel),
 }
@@ -30,20 +39,40 @@ impl LoadedBackend {
             Backend::TranscribeCpp { model } => Ok(Self::TranscribeCpp(Box::new(
                 Parakeet::load_for_benchmark(&model)?,
             ))),
+            #[cfg(hex_mlx)]
+            Backend::Mlx { model } => Ok(Self::Mlx(Box::new(crate::gigaam_mlx::GigaAmMlx::load(
+                &model, None,
+            )?))),
         }
     }
 
     fn name(&self) -> &str {
         match self {
             Self::TranscribeCpp(model) => model.name(),
+            #[cfg(hex_mlx)]
+            Self::Mlx(_) => "gigaam-multilingual-mlx",
             #[cfg(feature = "onnx-benchmark")]
             Self::Onnx(_) => "transcribe-rs-onnx-int8",
         }
     }
 
+    /// MLX's allocator after the runs (process-wide; RSS misses GPU buffers).
+    fn mlx_memory(&self) -> Option<serde_json::Value> {
+        #[cfg(hex_mlx)]
+        if let Self::Mlx(_) = self {
+            let (active, peak, cache) = crate::gigaam_mlx::GigaAmMlx::memory();
+            return Some(json!({"active_bytes": active, "peak_bytes": peak, "cache_bytes": cache}));
+        }
+        None
+    }
+
     fn transcribe(&mut self, samples: &[f32]) -> Result<String> {
         match self {
             Self::TranscribeCpp(model) => model.transcribe(samples),
+            #[cfg(hex_mlx)]
+            Self::Mlx(model) => model
+                .transcribe(samples, &std::sync::atomic::AtomicBool::new(false))
+                .map(|transcript| transcript.text),
             #[cfg(feature = "onnx-benchmark")]
             Self::Onnx(model) => {
                 use transcribe_rs::onnx::parakeet::{ParakeetParams, TimestampGranularity};
@@ -337,9 +366,7 @@ pub fn run(manifest_path: &Path, warmups: usize, runs: usize, backend: Backend) 
     }
 
     let median_run_ms = percentile(&run_times, 0.5);
-    write_json(
-        &mut output,
-        json!({
+    let mut summary = json!({
             "type": "summary",
             "backend": backend_name,
             "load_ms": load_ms,
@@ -359,8 +386,11 @@ pub fn run(manifest_path: &Path, warmups: usize, runs: usize, backend: Backend) 
             "wer": total_word_errors as f64 / total_reference_words as f64,
             "quality": quality.report(),
             "groups": groups.iter().map(|(name, quality)| (name, quality.report())).collect::<BTreeMap<_, _>>(),
-        }),
-    )?;
+    });
+    if let Some(memory) = backend.mlx_memory() {
+        summary["mlx_memory"] = memory;
+    }
+    write_json(&mut output, summary)?;
     output.flush()?;
     Ok(())
 }

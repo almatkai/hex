@@ -854,6 +854,17 @@ pub fn model_selection(
             ),
         ));
     }
+    if parsed == Some(TranscriptionModelId::GigaAmMultilingualMlx) && !crate::labs::gigaam_mlx() {
+        let why = if crate::labs::Feature::GigaAmMlx.on_this_os() {
+            "turn on Labs › GigaAM Multilingual (MLX): hex labs on gigaam-mlx"
+        } else {
+            "MLX runs only in Apple Silicon builds of Hex made with the `mlx` feature"
+        };
+        return Err(ControlError::new(
+            "model-unavailable",
+            format!("`{model}` can't be used: {why}"),
+        ));
+    }
     let id = parsed
         .filter(|id| crate::transcription::models::definition(*id).available())
         .ok_or_else(|| {

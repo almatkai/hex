@@ -119,6 +119,9 @@ pub struct LabsSettings {
     pub benchmark_details: bool,
     /// Parakeet Ultra joins the Local transcription picker (issue 648).
     pub parakeet_ultra: bool,
+    /// GigaAM Multilingual on MLX joins the Local transcription picker
+    /// (Apple Silicon builds with the `mlx` feature; docs/plans/gigaam-mlx.md).
+    pub gigaam_mlx: bool,
     /// Menu, Pause, and Scroll Lock may be shortcut keys (Linux, issue 767).
     pub standalone_special_keys: bool,
     pub history_stats: bool,
@@ -259,6 +262,7 @@ impl Default for LabsSettings {
             double_tap_modifiers: false,
             benchmark_details: false,
             parakeet_ultra: false,
+            gigaam_mlx: false,
             standalone_special_keys: false,
             history_stats: false,
             history_multi_select: false,

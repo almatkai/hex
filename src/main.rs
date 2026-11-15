@@ -34,6 +34,8 @@ mod dictation;
 mod durable;
 #[cfg(any(target_os = "macos", target_os = "linux", target_os = "windows"))]
 mod feedback;
+#[cfg(hex_mlx)]
+mod gigaam_mlx;
 mod history;
 #[cfg(target_os = "macos")]
 mod keyboard;
@@ -169,7 +171,8 @@ enum Command {
         /// Runtime to measure.
         #[arg(long, value_enum, default_value = "transcribe-cpp")]
         backend: TranscriptionBenchmarkBackend,
-        /// Override the default GGUF model path for the transcribe.cpp backend.
+        /// Override the default GGUF model path for the transcribe.cpp backend
+        /// (the MLX backend's artifact directory, which it requires).
         #[arg(long)]
         model: Option<PathBuf>,
         /// Full-corpus passes discarded before measurement.
@@ -186,6 +189,10 @@ enum Command {
 enum TranscriptionBenchmarkBackend {
     Onnx,
     TranscribeCpp,
+    /// GigaAM Multilingual on MLX; `--model` is the artifact directory
+    /// (config.json, manifest.json, model.safetensors). `mlx` builds only.
+    #[cfg(hex_mlx)]
+    Mlx,
 }
 
 #[cfg(target_os = "macos")]
@@ -590,6 +597,12 @@ fn main() -> Result<()> {
                         },
                     }
                 }
+                #[cfg(hex_mlx)]
+                TranscriptionBenchmarkBackend::Mlx => transcription::benchmark::Backend::Mlx {
+                    model: model.ok_or_else(|| {
+                        eyre!("--backend mlx needs --model <GigaAM MLX artifact directory>")
+                    })?,
+                },
             };
             transcription::benchmark::run(&manifest, warmups, runs, backend)
         }

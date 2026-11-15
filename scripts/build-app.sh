@@ -66,12 +66,28 @@ for name in HEX_LOCAL_BUILD HEX_TEST_BUILD HEX_COMMIT HEX_BUILD_CHANNEL; do
     env_args+=(--config "env.$name='$value'")
   fi
 done
+# HEX_CARGO_FEATURES=mlx adds GigaAM Multilingual on MLX (Apple Silicon,
+# off by default; docs/plans/gigaam-mlx.md): build.rs builds MLX through
+# CMake and leaves mlx.metallib in target/release, bundled below.
+feature_args=()
+if [ -n "${HEX_CARGO_FEATURES:-}" ]; then
+  feature_args+=(--features "$HEX_CARGO_FEATURES")
+fi
 # The helper's embedded Info.plist names Hex, not Scrawl.
 SCRAWL_HELPER_PLIST="$root/packaging/macos/scrawl-helper-Info.plist" \
-  cargo build --locked --release ${env_args[@]+"${env_args[@]}"} --manifest-path "$root/Cargo.toml" >&2
+  cargo build --locked --release ${env_args[@]+"${env_args[@]}"} ${feature_args[@]+"${feature_args[@]}"} --manifest-path "$root/Cargo.toml" >&2
 rm -rf "$bundle"
 mkdir -p "$bundle/Contents/MacOS" "$bundle/Contents/Resources" "$bundle/Contents/Library"
 cp "$root/target/release/hex" "$executable"
+case ",${HEX_CARGO_FEATURES:-}," in
+  *,mlx,*)
+    # MLX's kernels; src/gigaam_mlx.rs hands MLX this path before any op.
+    # Resources are sealed by the bundle signature; no nested code to sign.
+    if [ "$(uname -m)" = arm64 ]; then
+      cp "$root/target/release/mlx.metallib" "$bundle/Contents/Resources/mlx.metallib"
+    fi
+    ;;
+esac
 cp "$root/target/release/scrawl-helper" "$bundle/Contents/MacOS/scrawl-helper"
 cp "$root/app/Info.plist" "$bundle/Contents/Info.plist"
 cp "$root/LICENSE" "$root/THIRD_PARTY_NOTICES.md" "$bundle/Contents/Resources/"
