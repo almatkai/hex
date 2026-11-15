@@ -638,9 +638,8 @@ mod tests {
         };
         let header = std::str::from_utf8(&bytes[start..start + length]).unwrap();
         assert!(header.contains("'descr': '<f4'") && header.contains("'fortran_order': False"));
-        bytes[start + length..]
-            .chunks_exact(4)
-            .map(|value| f32::from_le_bytes(value.try_into().unwrap()))
-            .collect()
+        let (values, rest) = bytes[start + length..].as_chunks::<4>();
+        assert!(rest.is_empty(), "{}: truncated", path.display());
+        values.iter().map(|value| f32::from_le_bytes(*value)).collect()
     }
 }
